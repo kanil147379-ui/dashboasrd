@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0A0D10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Forge — Daily Dashboard</title>
+<!--
+  FORGE — personal productivity + gym dashboard. Single-file app, v2.
+  No external libraries, no network calls, no login.
+
+  DATA MODEL (v2)
+  ----------------
+  forge_tasks      : [{id, text, category, priority, done}]        — unchanged from v1
+  forge_habits     : [{id, name, done}]                             — unchanged from v1
+  forge_nutrients  : [{id, name, unit, target, current}]            — NEW, replaces forge_nutrition/forge_targets
+  forge_prs        : [{id, name, weight, unit, date}]                — NEW, manual personal records
+  forge_routines   : {Monday:[{id,group,exercises:[names]}], ...}    — NEW, weekly routine templates
+  forge_workoutsLog: [{id, date, group, exercises:[{name, sets:[{reps, weight}]}]}] — unchanged shape
+  forge_bodyweight : [{date, weight}]                                — unchanged
+  forge_history    : {"YYYY-MM-DD": {taskPct, habitPct, nutritionPct, workoutDone, overallPct, bodyweight}}
+  forge_streak     : {count, lastDate}
+  forge_lastActive : "YYYY-MM-DD"
+  forge_quoteOverride : {date, index}                                — NEW, manual "refresh quote" persists for the day
+
+  MIGRATION: on first load after this update, if forge_nutrients doesn't exist yet,
+  it is built from the old forge_nutrition + forge_targets values (if present) so
+  your current water/calorie/protein numbers are not lost. Old keys are left on disk,
+  unused, harmless.
+
+  ROLLOVER: unchanged behavior — at midnight, yesterday's completion is snapshotted
+  into forge_history, the streak updates (continues only if yesterday's overall
+  completion was >= 80%), then tasks/habits "done" flags and all nutrient "current"
+  values reset to 0. Templates themselves (task list, habit list, nutrient defs,
+  routines, PRs) are never touched by rollover.
+-->
+<style>
+:root{
+  --bg:#0A0D10;
+  --bg-elev:#10151A;
+  --card:#161C22;
+  --card-hi:#1D242C;
+  --border:#262E37;
+  --text:#EAEDEF;
+  --text-dim:#8B95A1;
+  --text-faint:#5A6470;
+  --teal:#3ED8C3;
+  --teal-dim:#1F5C54;
+  --amber:#F5A742;
+  --red:#F0555A;
+  --violet:#9A8CF2;
+  --green:#6FCF7A;
+  --blue:#4FA6E8;
+  --radius:16px;
+  --radius-sm:10px;
+  --font-body:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --font-mono:ui-monospace,"SFMono-Regular","Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-body);height:100%;overflow-x:hidden;}
+body{padding-bottom:calc(72px + env(safe-area-inset-bottom));}
+::-webkit-scrollbar{display:none;}
+h1,h2,h3,p{margin:0;}
+button{font-family:inherit;cursor:pointer;}
+input,select,textarea{font-family:inherit;}
+.tabular{font-variant-numeric:tabular-nums;}
+.mono{font-family:var(--font-mono);}
+
+.topbar{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,var(--bg) 60%,rgba(10,13,16,0));padding:calc(18px + env(safe-area-inset-top)) 18px 10px;}
+.topbar .eyebrow{font-family:var(--font-mono);font-size:11px;letter-spacing:.14em;color:var(--text-faint);text-transform:uppercase;}
+.topbar h1{font-size:22px;font-weight:700;margin-top:2px;letter-spacing:-.01em;}
+.topbar .date{color:var(--text-dim);font-size:13px;margin-top:2px;}
+
+.view{display:none;padding:0 16px 24px;animation:fadeIn .25s ease;}
+.view.active{display:block;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;}
+.card-title{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim);font-weight:600;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.card-title .hint{font-size:11px;color:var(--text-faint);text-transform:none;letter-spacing:0;font-weight:400;}
+.card-title-btn{background:none;border:none;color:var(--text-dim);display:flex;align-items:center;padding:2px;}
+.card-title-btn svg{width:15px;height:15px;}
+
+.ring-wrap{display:flex;align-items:center;gap:18px;padding:6px 2px 4px;}
+.ring-svg{flex-shrink:0;transform:rotate(-90deg);}
+.ring-center-label{position:relative;}
+#ringOverlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;}
+.ring-legend{display:flex;flex-direction:column;gap:7px;flex:1;min-width:0;}
+.legend-row{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-dim);}
+.legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.legend-row b{color:var(--text);font-family:var(--font-mono);margin-left:auto;font-size:12px;}
+.streak-pill{display:inline-flex;align-items:center;gap:5px;background:rgba(245,167,66,.12);border:1px solid rgba(245,167,66,.3);color:var(--amber);padding:4px 10px 4px 8px;border-radius:99px;font-size:12px;font-weight:600;font-family:var(--font-mono);}
+
+.pbar-track{height:8px;border-radius:99px;background:var(--bg-elev);overflow:hidden;border:1px solid var(--border);}
+.pbar-fill{height:100%;border-radius:99px;transition:width .4s ease;}
+.stat-row{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--text-dim);margin-bottom:6px;}
+.stat-row b{color:var(--text);font-family:var(--font-mono);}
+
+.quote{font-size:14px;line-height:1.5;color:var(--text-dim);font-style:italic;}
+.quote .who{display:block;margin-top:6px;font-style:normal;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);}
+
+.tile-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.tile{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;}
+.tile .tv{font-family:var(--font-mono);font-size:20px;font-weight:700;}
+.tile .tl{font-size:11px;color:var(--text-dim);margin-top:2px;text-transform:uppercase;letter-spacing:.04em;}
+
+.item-row{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--border);}
+.item-row:last-child{border-bottom:none;}
+.check{width:26px;height:26px;border-radius:8px;border:2px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--bg-elev);transition:all .15s ease;}
+.check.checked{background:var(--teal);border-color:var(--teal);}
+.check.checked svg{display:block;}
+.check svg{display:none;width:15px;height:15px;stroke:#06110F;}
+.item-body{flex:1;min-width:0;}
+.item-text{font-size:14.5px;line-height:1.3;}
+.item-text.done{color:var(--text-faint);text-decoration:line-through;}
+.item-meta{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;align-items:center;}
+.badge{font-size:10px;padding:2px 7px;border-radius:99px;font-weight:600;letter-spacing:.02em;}
+.badge.cat-College{background:rgba(154,140,242,.15);color:var(--violet);}
+.badge.cat-Gym{background:rgba(245,167,66,.15);color:var(--amber);}
+.badge.cat-Personal{background:rgba(111,207,122,.15);color:var(--green);}
+.badge.cat-Coding{background:rgba(62,216,195,.15);color:var(--teal);}
+.badge.cat-Health{background:rgba(240,85,90,.15);color:var(--red);}
+.badge.pri-High{background:rgba(240,85,90,.18);color:var(--red);}
+.badge.pri-Medium{background:rgba(245,167,66,.18);color:var(--amber);}
+.badge.pri-Low{background:rgba(139,149,161,.18);color:var(--text-dim);}
+.icon-btn{width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--bg-elev);display:flex;align-items:center;justify-content:center;color:var(--text-dim);flex-shrink:0;font-size:14px;}
+.icon-btn svg{width:16px;height:16px;}
+.icon-btn.sm{width:28px;height:28px;font-size:12px;}
+.row-actions{display:flex;gap:6px;}
+
+.btn{border:none;border-radius:var(--radius-sm);padding:13px 18px;font-size:14.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;width:100%;}
+.btn-primary{background:var(--teal);color:#062420;}
+.btn-ghost{background:var(--bg-elev);color:var(--text);border:1px solid var(--border);}
+.btn-danger{background:rgba(240,85,90,.15);color:var(--red);border:1px solid rgba(240,85,90,.3);}
+.btn-sm{padding:9px 12px;font-size:13px;width:auto;}
+.fab{position:fixed;right:18px;bottom:calc(86px + env(safe-area-inset-bottom));width:54px;height:54px;border-radius:50%;background:var(--teal);color:#062420;border:none;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(62,216,195,.35);z-index:15;}
+.fab svg{width:24px;height:24px;}
+
+.chip-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center;}
+.chip{background:var(--bg-elev);border:1px solid var(--border);color:var(--text);border-radius:99px;padding:8px 14px;font-size:13px;font-weight:600;font-family:var(--font-mono);}
+.chip-input{width:76px;background:var(--bg-elev);border:1px solid var(--border);color:var(--text);border-radius:99px;padding:8px 12px;font-size:13px;font-family:var(--font-mono);}
+
+.section-head{display:flex;align-items:center;justify-content:between;margin:18px 0 8px;}
+.section-head h2{font-size:15px;font-weight:700;}
+.section-sub{color:var(--text-dim);font-size:12px;margin-top:2px;}
+
+.pill-row{display:flex;gap:8px;overflow-x:auto;padding:2px 0 4px;margin-bottom:10px;}
+.pill{flex-shrink:0;background:var(--bg-elev);border:1px solid var(--border);color:var(--text-dim);border-radius:99px;padding:7px 13px;font-size:12.5px;font-weight:600;white-space:nowrap;}
+.pill.active{background:var(--teal);color:#062420;border-color:var(--teal);}
+
+.tabbar{position:fixed;bottom:0;left:0;right:0;z-index:30;background:rgba(16,21,26,.92);backdrop-filter:blur(14px);border-top:1px solid var(--border);display:flex;padding:6px 4px calc(6px + env(safe-area-inset-bottom));}
+.tabbtn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;color:var(--text-faint);padding:6px 2px;border-radius:12px;}
+.tabbtn svg{width:21px;height:21px;}
+.tabbtn span{font-size:9.5px;font-weight:600;letter-spacing:.02em;}
+.tabbtn.active{color:var(--teal);}
+
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:none;align-items:flex-end;justify-content:center;}
+.modal-backdrop.open{display:flex;}
+.modal{background:var(--bg-elev);border:1px solid var(--border);border-radius:20px 20px 0 0;width:100%;max-width:520px;padding:20px 18px calc(20px + env(safe-area-inset-bottom));max-height:86vh;overflow-y:auto;animation:slideUp .25s ease;}
+@keyframes slideUp{from{transform:translateY(30px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+.modal h3{font-size:16px;margin-bottom:14px;}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;}
+.field input,.field select{width:100%;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 12px;color:var(--text);font-size:14.5px;}
+.field-row{display:flex;gap:10px;}
+.field-row .field{flex:1;}
+.seg{display:flex;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;}
+.seg button{flex:1;padding:10px 6px;background:none;border:none;color:var(--text-dim);font-size:13px;font-weight:600;}
+.seg button.active{background:var(--teal);color:#062420;}
+.modal-actions{display:flex;gap:10px;margin-top:16px;}
+.exercise-block{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;}
+.set-row{display:flex;gap:8px;align-items:center;margin-top:6px;}
+.set-row span{font-size:11px;color:var(--text-faint);width:16px;font-family:var(--font-mono);}
+.set-row input{flex:1;}
+.timer-row{display:flex;gap:6px;align-items:center;margin:6px 0 4px 24px;flex-wrap:wrap;}
+.timer-row select{width:auto;padding:6px 8px;font-size:12px;background:var(--bg-elev);}
+.timer-row input{width:56px!important;flex:none!important;padding:6px 8px;font-size:12px;}
+.timer-display{font-size:13px;font-weight:700;color:var(--teal);min-width:44px;}
+.pr-tag{background:rgba(245,167,66,.18);color:var(--amber);font-size:10px;padding:2px 6px;border-radius:6px;font-weight:700;margin-left:6px;}
+.routine-exercise-row{display:flex;gap:6px;margin-bottom:6px;}
+.routine-exercise-row input{flex:1;}
+
+#toast{position:fixed;bottom:calc(90px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(20px);background:var(--card-hi);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:99px;font-size:13px;z-index:60;opacity:0;pointer-events:none;transition:all .25s ease;box-shadow:0 6px 20px rgba(0,0,0,.4);}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+.chart-wrap{overflow-x:auto;}
+.empty-state{text-align:center;padding:30px 10px;color:var(--text-faint);font-size:13px;}
+.flex-between{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.mt8{margin-top:8px;}
+.mb0{margin-bottom:0;}
+@media(min-width:600px){
+  .view{max-width:560px;margin:0 auto;}
+  .topbar{max-width:560px;margin:0 auto;}
+  .tabbar{max-width:560px;margin:0 auto;left:0;right:0;border-radius:20px 20px 0 0;}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="eyebrow" id="eyebrowDate">—</div>
+  <h1>Forge</h1>
+  <div class="date" id="subDate">Loading…</div>
+</div>
+
+<!-- ============ DASHBOARD ============ -->
+<section class="view active" id="view-dashboard">
+  <div class="card">
+    <div class="card-title">Today <span class="hint" id="dashPctHint">0% complete</span></div>
+    <div class="ring-wrap">
+      <div class="ring-center-label" style="position:relative;">
+        <svg id="ringSvg" class="ring-svg" width="150" height="150" viewBox="0 0 150 150"></svg>
+        <div id="ringOverlay">
+          <div class="tabular mono" style="font-size:26px;font-weight:700;" id="ringPct">0%</div>
+          <div class="streak-pill" id="streakPill" style="margin-top:6px;">🔥 0</div>
+        </div>
+      </div>
+      <div class="ring-legend" id="ringLegend"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Quick add</div>
+    <div class="chip-row" id="dashQuickAdd"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Today's tasks <span class="hint" id="taskHint"></span></div>
+    <div class="pbar-track" style="margin-bottom:10px;"><div class="pbar-fill" id="dashTaskBar" style="background:var(--teal);width:0%;"></div></div>
+    <div id="dashTaskList"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Today's workout</div>
+    <div id="dashWorkout"></div>
+  </div>
+
+  <div class="tile-grid" id="dashTileGrid"></div>
+
+  <div class="card">
+    <div class="card-title">Quote of the Day
+      <button class="card-title-btn" onclick="Forge.refreshQuote()" title="Get another quote">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+      </button>
+    </div>
+    <p class="quote" id="dashQuote">Loading…</p>
+  </div>
+</section>
+
+<!-- ============ TASKS ============ -->
+<section class="view" id="view-tasks">
+  <div class="section-head"><div><h2>Tasks</h2><div class="section-sub" id="taskProgressLine">0 of 0 done</div></div></div>
+  <div class="pbar-track" style="margin-bottom:12px;"><div class="pbar-fill" id="taskBarMain" style="background:var(--teal);width:0%;"></div></div>
+  <div class="pill-row" id="taskFilterRow"></div>
+  <div class="card" id="taskListCard"><div id="taskListFull"></div></div>
+</section>
+
+<!-- ============ GYM ============ -->
+<section class="view" id="view-gym">
+  <div class="section-head"><div><h2>Gym</h2><div class="section-sub">Log it, plan it, beat it next time</div></div></div>
+
+  <div class="pill-row" id="gymSubNav">
+    <button class="pill active" data-sub="log" onclick="Forge.setGymSub('log')">Log</button>
+    <button class="pill" data-sub="routine" onclick="Forge.setGymSub('routine')">Routine</button>
+    <button class="pill" data-sub="records" onclick="Forge.setGymSub('records')">Records</button>
+  </div>
+
+  <!-- Log sub-view -->
+  <div id="gymSub-log">
+    <div class="card">
+      <div class="card-title">Body weight <span class="hint" id="bwLatest"></span></div>
+      <div class="field-row">
+        <div class="field mb0" style="margin-bottom:0;"><input type="number" id="bwInput" placeholder="e.g. 68.4" step="0.1"></div>
+        <button class="btn btn-primary btn-sm" onclick="Forge.logBodyweight()">Log</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Recent sessions</div>
+      <div id="gymLog"></div>
+    </div>
+  </div>
+
+  <!-- Routine sub-view -->
+  <div id="gymSub-routine" style="display:none;">
+    <div class="pill-row" id="routineDayNav"></div>
+    <div id="routineBlockList"></div>
+  </div>
+
+  <!-- Records sub-view -->
+  <div id="gymSub-records" style="display:none;">
+    <div class="card"><div class="card-title">Personal records</div><div id="prListFull"></div></div>
+  </div>
+</section>
+
+<!-- ============ FUEL ============ -->
+<section class="view" id="view-nutrition">
+  <div class="section-head"><div><h2>Fuel</h2><div class="section-sub">Fully customizable — auto-resets at midnight</div></div></div>
+  <div id="nutrientCards"></div>
+  <button class="btn btn-ghost" onclick="Forge.openNutrientModalNew()">+ Add nutrient</button>
+</section>
+
+<!-- ============ HABITS ============ -->
+<section class="view" id="view-habits">
+  <div class="section-head"><div><h2>Habits</h2><div class="section-sub" id="habitSub">Small reps, every day</div></div></div>
+  <div class="card"><div id="habitList"></div></div>
+  <button class="btn btn-ghost" onclick="Forge.openHabitModal()">+ Add habit</button>
+</section>
+
+<!-- ============ STATS ============ -->
+<section class="view" id="view-stats">
+  <div class="section-head"><div><h2>Statistics</h2><div class="section-sub">Last 14 days</div></div></div>
+  <div class="card"><div class="card-title">Overall completion</div><div class="chart-wrap"><svg id="chartCompletion" width="100%" height="120"></svg></div></div>
+  <div class="card"><div class="card-title">Body weight trend</div><div class="chart-wrap"><svg id="chartWeight" width="100%" height="120"></svg></div></div>
+  <div class="card"><div class="card-title">Workout consistency</div><div id="workoutConsistency"></div></div>
+  <div class="card"><div class="card-title">Habit streaks</div><div id="habitStreaks"></div></div>
+  <div class="card"><div class="card-title">Monthly summary</div><div class="tile-grid" id="monthlyTiles"></div></div>
+</section>
+
+<!-- ============ TAB BAR ============ -->
+<nav class="tabbar">
+  <button class="tabbtn active" data-view="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span>Home</span></button>
+  <button class="tabbtn" data-view="tasks"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg><span>Tasks</span></button>
+  <button class="tabbtn" data-view="gym"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 7v10M18 7v10M2 10v4M22 10v4M6 12h12"/></svg><span>Gym</span></button>
+  <button class="tabbtn" data-view="nutrition"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6M8 4c0 3-2 3-2 6a6 6 0 0012 0c0-3-2-3-2-6"/><path d="M6 14a6 6 0 0012 0v7H6z"/></svg><span>Fuel</span></button>
+  <button class="tabbtn" data-view="habits"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg><span>Habits</span></button>
+  <button class="tabbtn" data-view="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg><span>Stats</span></button>
+</nav>
+
+<button class="fab" id="fabBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg></button>
+
+<!-- ============ MODALS ============ -->
+
+<div class="modal-backdrop" id="taskModalBackdrop">
+  <div class="modal">
+    <h3 id="taskModalTitle">New task</h3>
+    <input type="hidden" id="taskEditId">
+    <div class="field"><label>What needs doing</label><input id="taskText" placeholder="e.g. Finish DBMS assignment"></div>
+    <div class="field"><label>Category</label>
+      <div class="seg" id="taskCatSeg"><button data-v="College" class="active">College</button><button data-v="Gym">Gym</button><button data-v="Personal">Personal</button><button data-v="Coding">Coding</button><button data-v="Health">Health</button></div>
+    </div>
+    <div class="field"><label>Priority</label>
+      <div class="seg" id="taskPriSeg"><button data-v="High">High</button><button data-v="Medium" class="active">Medium</button><button data-v="Low">Low</button></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="Forge.closeModal('taskModalBackdrop')">Cancel</button>
+      <button class="btn btn-primary" onclick="Forge.saveTask()">Save task</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="habitModalBackdrop">
+  <div class="modal">
+    <h3>New habit</h3>
+    <div class="field"><label>Habit name</label><input id="habitText" placeholder="e.g. Cold shower"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="Forge.closeModal('habitModalBackdrop')">Cancel</button>
+      <button class="btn btn-primary" onclick="Forge.saveHabit()">Save habit</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="workoutModalBackdrop">
+  <div class="modal">
+    <h3>Log workout</h3>
+    <div class="field"><label>Muscle group</label>
+      <select id="workoutGroup"><option>Chest</option><option>Back</option><option>Legs</option><option>Shoulders</option><option>Arms</option><option>Core</option><option>Full Body</option><option>Cardio</option></select>
+    </div>
+    <div class="chip-row" id="loadRoutineChips"></div>
+    <div id="exerciseBlocks"></div>
+    <button class="btn btn-ghost" onclick="Forge.addExerciseBlock()">+ Add exercise</button>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="Forge.closeModal('workoutModalBackdrop')">Cancel</button>
+      <button class="btn btn-primary" onclick="Forge.saveWorkout()">Save workout</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="routineModalBackdrop">
+  <div class="modal">
+    <h3 id="routineModalTitle">Add routine block</h3>
+    <input type="hidden" id="routineEditId">
+    <input type="hidden" id="routineEditDay">
+    <div class="field"><label>Muscle group</label><input id="routineGroupInput" placeholder="e.g. Chest, Triceps, Core..."></div>
+    <div class="field"><label>Exercises</label><div id="routineExerciseInputs"></div>
+      <button class="btn btn-ghost btn-sm" onclick="Forge.addRoutineExerciseInput()">+ Exercise</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="Forge.closeModal('routineModalBackdrop')">Cancel</button>
+      <button class="btn btn-primary" onclick="Forge.saveRoutineBlock()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="prModalBackdrop">
+  <div class="modal">
+    <h3 id="prModalTitle">Add personal record</h3>
+    <input type="hidden" id="prEditId">
+    <div class="field"><label>Exercise name</label><input id="prNameInput" placeholder="e.g. Bench Press"></div>
+    <div class="field-row">
+      <div class="field"><label>Weight</label><input type="number" id="prWeightInput" step="0.5"></div>
+      <div class="field"><label>Unit</label><input id="prUnitInput" value="kg"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="Forge.closeModal('prModalBackdrop')">Cancel</button>
+      <button class="btn btn-primary" onclick="Forge.savePR()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="nutrientModalBackdrop">
+  <div class="modal">
+    <h3 id="nutrientModalTitle">Add nutrient</h3>
+    <input type="hidden" id="nutEditId">
+    <div class="field"><label>Name</label><input id="nutNameInput" placeholder="e.g. Fibre"></div>
+    <div class="field-row">
+      <div class="field"><label>Daily target</label><input type="number" id="nutTargetInput"></div>
+      <div class="field"><label>Unit</label><input id="nutUnitInput" placeholder="g, mg, kcal, ml, L"></div>
+    </div>
+    <div class="field"><label>Current intake today</label><input type="number" id="nutCurrentInput"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="Forge.closeModal('nutrientModalBackdrop')">Cancel</button>
+      <button class="btn btn-primary" onclick="Forge.saveNutrient()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ==========================================================================
+   FORGE — vanilla JS, no frameworks, no build step. Namespaced under Forge.
+   ========================================================================== */
+const Forge = (function(){
+
+  /* ------------------------- tiny utilities ------------------------- */
+  const $ = (sel, root=document) => root.querySelector(sel);
+  const $all = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+  const todayKey = (d=new Date()) => {
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${da}`;
+  };
+  const clamp = (n,a,b) => Math.max(a,Math.min(b,n));
+  const pct = (num,den) => den>0 ? clamp(Math.round((num/den)*100),0,100) : 0;
+  const round1 = n => Math.round(n*10)/10;
+  const DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  const PALETTE = ['#4FA6E8','#F5A742','#9A8CF2','#6FCF7A','#3ED8C3','#F0555A'];
+
+  function toast(msg){
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast._h);
+    toast._h = setTimeout(()=>t.classList.remove('show'), 1800);
+  }
+  function escapeHTML(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+  /* ------------------------- storage layer ------------------------- */
+  const KEYS = {
+    tasks:'forge_tasks', habits:'forge_habits', nutrients:'forge_nutrients',
+    prs:'forge_prs', routines:'forge_routines',
+    workouts:'forge_workoutsLog', bodyweight:'forge_bodyweight',
+    history:'forge_history', streak:'forge_streak', lastActive:'forge_lastActive',
+    quoteOverride:'forge_quoteOverride',
+    // legacy v1 keys, read-only, used for migration then left untouched
+    legacyNutrition:'forge_nutrition', legacyTargets:'forge_targets'
+  };
+  function load(key, fallback){
+    try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }
+    catch(e){ console.error('Forge storage read failed for', key, e); return fallback; }
+  }
+  function save(key, val){
+    try{ localStorage.setItem(key, JSON.stringify(val)); }
+    catch(e){ console.error('Forge storage write failed for', key, e); toast('Storage full or blocked — changes may not persist'); }
+  }
+
+  /* ------------------------- default seed data ------------------------- */
+  const DEFAULT_TASKS = [
+    {id:uid(), text:'Review today\'s lectures', category:'College', priority:'Medium', done:false},
+    {id:uid(), text:'150 pushups spread across the day', category:'Gym', priority:'High', done:false},
+    {id:uid(), text:'1 hour of focused coding', category:'Coding', priority:'High', done:false},
+  ];
+  const DEFAULT_HABITS = [
+    {id:uid(), name:'Wake up early', done:false}, {id:uid(), name:'Gym', done:false},
+    {id:uid(), name:'Study', done:false}, {id:uid(), name:'Reading', done:false},
+    {id:uid(), name:'Meditation', done:false}, {id:uid(), name:'Sleep before 11 PM', done:false},
+  ];
+  const DEFAULT_PR_NAMES = ['Bench Press','Squat','Deadlift','Shoulder Press','Barbell Row'];
+
+  /* ------------------------- 110 built-in quotes (offline, no lyrics/poetry) ------------------------- */
+  const QUOTES = [
+    ["Discipline is choosing between what you want now and what you want most.","Anon"],
+    ["Motivation gets you started. Habit keeps you going.","Jim Rohn"],
+    ["The body achieves what the mind believes.","Anon"],
+    ["You don't rise to the level of your goals, you fall to the level of your systems.","James Clear"],
+    ["Small daily improvements are the key to staggering long-term results.","Anon"],
+    ["Do something today that your future self will thank you for.","Anon"],
+    ["Consistency beats intensity over time.","Anon"],
+    ["The pain of discipline weighs ounces, the pain of regret weighs tons.","Anon"],
+    ["He who conquers himself is the mightiest warrior.","Confucius"],
+    ["Well done is better than well said.","Benjamin Franklin"],
+    ["Waste no more time arguing what a good man should be. Be one.","Marcus Aurelius"],
+    ["The impediment to action advances action. What stands in the way becomes the way.","Marcus Aurelius"],
+    ["He who has a why to live can bear almost any how.","Friedrich Nietzsche"],
+    ["It is not that we have a short time to live, but that we waste a lot of it.","Seneca"],
+    ["Difficulties strengthen the mind, as labor does the body.","Seneca"],
+    ["No man is free who is not master of himself.","Epictetus"],
+    ["First say to yourself what you would be, then do what you have to do.","Epictetus"],
+    ["The journey of a thousand miles begins with a single step.","Lao Tzu"],
+    ["Knowing yourself is the beginning of all wisdom.","Aristotle"],
+    ["We are what we repeatedly do. Excellence, then, is not an act but a habit.","Will Durant"],
+    ["Show up. Do the work. Repeat. That's the whole system.","Anon"],
+    ["Your future is created by what you do today, not tomorrow.","Anon"],
+    ["Progress is progress, no matter how small.","Anon"],
+    ["Every rep you almost skip is the one that counts most.","Anon"],
+    ["The gym doesn't build champions. Showing up on the days you don't want to does.","Anon"],
+    ["Track it, or it didn't happen.","Anon"],
+    ["A late start is still a start.","Anon"],
+    ["Comfort is the enemy of growth.","Anon"],
+    ["You are one workout away from a good mood.","Anon"],
+    ["Strength doesn't come from what you can do. It comes from overcoming what you thought you couldn't.","Anon"],
+    ["The only bad workout is the one that didn't happen.","Anon"],
+    ["Energy and persistence conquer all things.","Benjamin Franklin"],
+    ["Action is the foundational key to all success.","Pablo Picasso"],
+    ["Either you run the day, or the day runs you.","Jim Rohn"],
+    ["Success is the sum of small efforts, repeated day in and day out.","Robert Collier"],
+    ["A goal without a plan is just a wish.","Antoine de Saint-Exupery"],
+    ["Discipline equals freedom.","Anon"],
+    ["What gets measured gets managed.","Peter Drucker"],
+    ["The best time to plant a tree was 20 years ago. The second best time is now.","Chinese Proverb"],
+    ["Fall seven times, stand up eight.","Japanese Proverb"],
+    ["Little by little, a little becomes a lot.","Tanzanian Proverb"],
+    ["Not all storms come to disrupt your life, some come to clear your path.","Anon"],
+    ["Your body can stand almost anything. It's your mind you have to convince.","Anon"],
+    ["Push yourself, because no one else is going to do it for you.","Anon"],
+    ["The only person you should try to be better than is who you were yesterday.","Anon"],
+    ["Dream big. Start small. Act now.","Robin Sharma"],
+    ["Focus on being productive instead of busy.","Tim Ferriss"],
+    ["Slow progress is still progress.","Anon"],
+    ["You don't have to be extreme, just consistent.","Anon"],
+    ["Sore today, strong tomorrow.","Anon"],
+    ["Nobody who ever gave his best regretted it.","George Halas"],
+    ["What you do every day matters more than what you do once in a while.","Gretchen Rubin"],
+    ["Make each day your masterpiece.","John Wooden"],
+    ["The man who moves a mountain begins by carrying away small stones.","Confucius"],
+    ["Amateurs sit and wait for inspiration. The rest of us just get up and go to work.","Stephen King"],
+    ["Do the hard jobs first. The easy jobs will take care of themselves.","Dale Carnegie"],
+    ["A year from now you may wish you had started today.","Karen Lamb"],
+    ["It always seems impossible until it's done.","Nelson Mandela"],
+    ["Great things are done by a series of small things brought together.","Vincent van Gogh"],
+    ["Success usually comes to those who are too busy to be looking for it.","Henry David Thoreau"],
+    ["Habits are the compound interest of self-improvement.","James Clear"],
+    ["You will never always be motivated, so you must learn to be disciplined.","Anon"],
+    ["Rest at the end, not in the middle.","Anon"],
+    ["Champions keep playing until they get it right.","Billie Jean King"],
+    ["Do not wait to strike till the iron is hot, but make it hot by striking.","William Butler Yeats"],
+    ["The expert in anything was once a beginner.","Anon"],
+    ["A river cuts through rock not because of its power, but its persistence.","Jim Watkins"],
+    ["Deep breath. One task at a time.","Anon"],
+    ["Order and simplicity are the first requisites of a well-run day.","Anon"],
+    ["Plans are worthless, but planning is everything.","Dwight D. Eisenhower"],
+    ["What is not started today is never finished tomorrow.","Johann Wolfgang von Goethe"],
+    ["The way to get started is to quit talking and begin doing.","Walt Disney"],
+    ["Don't count the days, make the days count.","Muhammad Ali"],
+    ["It's not whether you get knocked down, it's whether you get up.","Vince Lombardi"],
+    ["Setting goals is the first step in turning the invisible into the visible.","Tony Robbins"],
+    ["You must expect great things of yourself before you can do them.","Michael Jordan"],
+    ["The successful warrior is the average man, with laser-like focus.","Bruce Lee"],
+    ["Absorb what is useful, discard what is not, add what is uniquely your own.","Bruce Lee"],
+    ["I hated every minute of training, but I said, 'Don't quit. Suffer now and live the rest of your life as a champion.'","Muhammad Ali"],
+    ["A goal properly set is halfway reached.","Zig Ziglar"],
+    ["Well begun is half done.","Aristotle"],
+    ["Patience, persistence and perspiration make an unbeatable combination for success.","Napoleon Hill"],
+    ["Whatever the mind can conceive and believe, it can achieve.","Napoleon Hill"],
+    ["Simplicity is the ultimate sophistication.","Leonardo da Vinci"],
+    ["An hour of planning can save you ten hours of doing.","Dale Carnegie"],
+    ["The secret of getting ahead is getting started.","Mark Twain"],
+    ["The two most important days in your life are the day you are born and the day you find out why.","Mark Twain"],
+    ["Continuous effort, not strength or intelligence, is the key to unlocking our potential.","Winston Churchill"],
+    ["Never give up, for that is just the place and time that the tide will turn.","Harriet Beecher Stowe"],
+    ["The future depends on what you do today.","Mahatma Gandhi"],
+    ["A person who never made a mistake never tried anything new.","Albert Einstein"],
+    ["In the middle of difficulty lies opportunity.","Albert Einstein"],
+    ["Try not to become a person of success, but rather a person of value.","Albert Einstein"],
+    ["Genius is one percent inspiration, ninety-nine percent perspiration.","Thomas Edison"],
+    ["Our greatest weakness lies in giving up. The most certain way to succeed is to try one more time.","Thomas Edison"],
+    ["I have not failed. I've just found 10,000 ways that won't work.","Thomas Edison"],
+    ["Quality is not an act, it is a habit.","Aristotle"],
+    ["The only limit to our realization of tomorrow is our doubts of today.","Franklin D. Roosevelt"],
+    ["Do the best you can until you know better. Then when you know better, do better.","Maya Angelou"],
+    ["Nothing is impossible, the word itself says I'm possible.","Audrey Hepburn"],
+    ["Believe you can and you're halfway there.","Theodore Roosevelt"],
+    ["It does not matter how slowly you go as long as you do not stop.","Confucius"],
+    ["Choose a job you love, and you will never have to work a day in your life.","Confucius"],
+    ["Learning never exhausts the mind.","Leonardo da Vinci"],
+    ["Great works are performed not by strength but by perseverance.","Samuel Johnson"],
+    ["Perseverance is not a long race; it is many short races one after another.","Walter Elliot"],
+    ["He that can have patience can have what he will.","Benjamin Franklin"],
+    ["By failing to prepare, you are preparing to fail.","Benjamin Franklin"],
+    ["What you get by achieving your goals is not as important as what you become by achieving them.","Zig Ziglar"],
+    ["The way to get started is to quit talking and begin doing.","Walt Disney"],
+    ["You are never too old to set another goal or dream a new dream.","C.S. Lewis"],
+    ["It always seems impossible until it's done.","Nelson Mandela"],
+    ["Turn your wounds into wisdom.","Oprah Winfrey"],
+    ["Strive not to be a success, but rather to be of value.","Albert Einstein"],
+    ["A little progress each day adds up to big results.","Anon"],
+  ];
+
+  /* ------------------------- in-memory state ------------------------- */
+  let state = {
+    tasks:[], habits:[], nutrients:null, prs:null, routines:null,
+    workouts:[], bodyweight:[], history:{}, streak:{count:0,lastDate:null}
+  };
+
+  function loadAll(){
+    state.tasks = load(KEYS.tasks, DEFAULT_TASKS);
+    state.habits = load(KEYS.habits, DEFAULT_HABITS);
+    state.nutrients = load(KEYS.nutrients, null);
+    state.prs = load(KEYS.prs, null);
+    state.routines = load(KEYS.routines, null);
+    state.workouts = load(KEYS.workouts, []);
+    state.bodyweight = load(KEYS.bodyweight, []);
+    state.history = load(KEYS.history, {});
+    state.streak = load(KEYS.streak, {count:0,lastDate:null});
+  }
+
+  /* migration: build v2 stores from v1 data (or fresh defaults) exactly once */
+  function runMigrations(){
+    let changed = false;
+    if(state.prs === null){
+      state.prs = DEFAULT_PR_NAMES.map(name=>({id:uid(), name, weight:0, unit:'kg', date:null}));
+      changed = true;
+    }
+    if(state.routines === null){
+      state.routines = {};
+      DAYS.forEach(d=>state.routines[d]=[]);
+      changed = true;
+    }
+    if(state.nutrients === null){
+      const oldNutrition = load(KEYS.legacyNutrition, null);
+      const oldTargets = load(KEYS.legacyTargets, null);
+      if(oldNutrition || oldTargets){
+        const n = oldNutrition || {calories:0,protein:0,water:0};
+        const t = oldTargets || {calories:2400,protein:140,water:3000};
+        state.nutrients = [
+          {id:uid(), name:'Water', unit:'ml', target:t.water, current:n.water},
+          {id:uid(), name:'Calories', unit:'kcal', target:t.calories, current:n.calories},
+          {id:uid(), name:'Protein', unit:'g', target:t.protein, current:n.protein},
+        ];
+      } else {
+        state.nutrients = [
+          {id:uid(), name:'Water', unit:'ml', target:3000, current:0},
+          {id:uid(), name:'Calories', unit:'kcal', target:2400, current:0},
+          {id:uid(), name:'Protein', unit:'g', target:140, current:0},
+        ];
+      }
+      changed = true;
+    }
+    if(changed) persist();
+  }
+
+  function persist(){
+    save(KEYS.tasks, state.tasks);
+    save(KEYS.habits, state.habits);
+    save(KEYS.nutrients, state.nutrients);
+    save(KEYS.prs, state.prs);
+    save(KEYS.routines, state.routines);
+    save(KEYS.workouts, state.workouts);
+    save(KEYS.bodyweight, state.bodyweight);
+    save(KEYS.history, state.history);
+    save(KEYS.streak, state.streak);
+  }
+
+  /* ------------------------- completion math ------------------------- */
+  function computeCategoryPcts(){
+    const taskPct = pct(state.tasks.filter(t=>t.done).length, state.tasks.length);
+    const habitPct = pct(state.habits.filter(h=>h.done).length, state.habits.length);
+    const nutrientPcts = state.nutrients.map(n=>pct(n.current, n.target));
+    const nutritionPct = nutrientPcts.length ? Math.round(nutrientPcts.reduce((a,b)=>a+b,0)/nutrientPcts.length) : 0;
+    const workoutDoneToday = state.workouts.some(w=>w.date===todayKey());
+    const workoutPct = workoutDoneToday ? 100 : 0;
+    const overall = Math.round((taskPct+habitPct+nutritionPct+workoutPct)/4);
+    return {taskPct, habitPct, nutritionPct, workoutPct, overall};
+  }
+
+  /* ------------------------- midnight rollover ------------------------- */
+  function runRollover(){
+    const today = todayKey();
+    const last = load(KEYS.lastActive, null);
+    if(last === today) return;
+
+    if(last){
+      const p = computeCategoryPcts();
+      state.history[last] = {
+        taskPct:p.taskPct, habitPct:p.habitPct, nutritionPct:p.nutritionPct,
+        workoutDone:p.workoutPct===100, overallPct:p.overall,
+        bodyweight: state.bodyweight.length ? state.bodyweight[state.bodyweight.length-1].weight : null
+      };
+      state.streak.count = p.overall >= 80 ? state.streak.count + 1 : 0;
+      state.streak.lastDate = last;
+    }
+
+    state.tasks.forEach(t=>t.done=false);
+    state.habits.forEach(h=>h.done=false);
+    state.nutrients.forEach(n=>n.current=0);
+
+    save(KEYS.lastActive, today);
+    persist();
+  }
+
+  /* ------------------------- RENDER: Day Ring (4 categories) ------------------------- */
+  function renderRing(){
+    const p = computeCategoryPcts();
+    const rings = [
+      {pct:p.taskPct, color:'#3ED8C3', label:'Tasks'},
+      {pct:p.workoutPct, color:'#F5A742', label:'Workout'},
+      {pct:p.nutritionPct, color:'#9A8CF2', label:'Nutrition'},
+      {pct:p.habitPct, color:'#6FCF7A', label:'Habits'},
+    ];
+    const svg = $('#ringSvg');
+    const cx=75, cy=75, baseR=68, step=15, sw=9;
+    let html='';
+    rings.forEach((r,i)=>{
+      const radius = baseR - i*step;
+      const circ = 2*Math.PI*radius;
+      const dash = (r.pct/100)*circ;
+      html += `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="#20272F" stroke-width="${sw}"/>`;
+      html += `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="${r.color}" stroke-width="${sw}" stroke-linecap="round" stroke-dasharray="${dash} ${circ}" style="transition:stroke-dasharray .5s ease;"/>`;
+    });
+    svg.innerHTML = html;
+    $('#ringPct').textContent = p.overall + '%';
+    $('#dashPctHint').textContent = p.overall + '% complete';
+    $('#streakPill').textContent = '🔥 ' + state.streak.count;
+    $('#ringLegend').innerHTML = rings.map(r=>`<div class="legend-row"><span class="legend-dot" style="background:${r.color}"></span>${r.label}<b>${r.pct}%</b></div>`).join('');
+  }
+
+  /* ------------------------- RENDER: Dashboard ------------------------- */
+  function renderDashboard(){
+    runRollover();
+    renderRing();
+
+    const tl = $('#dashTaskList');
+    const doneCount = state.tasks.filter(t=>t.done).length;
+    $('#taskHint').textContent = `${doneCount}/${state.tasks.length}`;
+    $('#dashTaskBar').style.width = pct(doneCount, state.tasks.length) + '%';
+    tl.innerHTML = state.tasks.length ? state.tasks.slice(0,4).map(t=>taskRowHTML(t,false)).join('') : `<div class="empty-state">No tasks yet. Tap + to add one.</div>`;
+
+    const w = state.workouts.find(w=>w.date===todayKey());
+    const wc = $('#dashWorkout');
+    wc.innerHTML = w
+      ? `<div class="badge cat-Gym" style="margin-bottom:8px;display:inline-block;">${escapeHTML(w.group)}</div>` + w.exercises.map(ex=>`<div style="font-size:13.5px;margin-top:6px;">${escapeHTML(ex.name)} — ${ex.sets.length} sets</div>`).join('')
+      : `<div class="empty-state">No workout logged today. Hit Gym tab to log one.</div>`;
+
+    // dynamic tiles: first 3 nutrients + habits
+    const nutrientTiles = state.nutrients.slice(0,3).map(n=>`
+      <div class="tile"><div class="tv">${n.current}<span style="font-size:11px;color:var(--text-dim);">${escapeHTML(n.unit)}</span></div><div class="tl">${escapeHTML(n.name)}</div></div>
+    `).join('');
+    const habitsTile = `<div class="tile"><div class="tv">${state.habits.filter(h=>h.done).length}/${state.habits.length}</div><div class="tl">Habits</div></div>`;
+    $('#dashTileGrid').innerHTML = nutrientTiles + habitsTile;
+
+    const idx = pickQuoteIndex();
+    const q = QUOTES[idx];
+    $('#dashQuote').innerHTML = `“${escapeHTML(q[0])}”<span class="who">${escapeHTML(q[1])}</span>`;
+
+    const qa = $('#dashQuickAdd');
+    let chips = '';
+    const nextHabit = state.habits.find(h=>!h.done);
+    if(nextHabit) chips += `<button class="chip" onclick="Forge.toggleHabit('${nextHabit.id}')">✓ ${escapeHTML(nextHabit.name)}</button>`;
+    const waterN = state.nutrients.find(n=>n.name.trim().toLowerCase()==='water');
+    if(waterN) chips += `<button class="chip" onclick="Forge.addToNutrient('${waterN.id}',250)">+250${escapeHTML(waterN.unit)} water</button>`;
+    chips += `<button class="chip" onclick="Forge.switchView('gym')">Log workout</button>`;
+    qa.innerHTML = chips;
+  }
+
+  /* ------------------------- Quote of the Day ------------------------- */
+  function pickQuoteIndex(){
+    const today = todayKey();
+    const override = load(KEYS.quoteOverride, null);
+    if(override && override.date===today) return override.index;
+    let hash=0; for(const c of today){ hash=(hash*31+c.charCodeAt(0))>>>0; }
+    return hash % QUOTES.length;
+  }
+  function refreshQuote(){
+    const today = todayKey();
+    const current = pickQuoteIndex();
+    let idx = current;
+    if(QUOTES.length>1){ while(idx===current){ idx = Math.floor(Math.random()*QUOTES.length); } }
+    save(KEYS.quoteOverride, {date:today, index:idx});
+    renderDashboard();
+    toast('New quote loaded');
+  }
+
+  /* ------------------------- RENDER: Tasks (unchanged from v1) ------------------------- */
+  let taskFilter = 'All';
+  function taskRowHTML(t, showActions=true){
+    return `
+    <div class="item-row">
+      <button class="check ${t.done?'checked':''}" onclick="Forge.toggleTask('${t.id}')">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round"><path d="M5 13l4 4L19 7"/></svg>
+      </button>
+      <div class="item-body">
+        <div class="item-text ${t.done?'done':''}">${escapeHTML(t.text)}</div>
+        <div class="item-meta"><span class="badge cat-${t.category}">${t.category}</span><span class="badge pri-${t.priority}">${t.priority}</span></div>
+      </div>
+      ${showActions ? `
+      <div class="row-actions">
+        <button class="icon-btn" onclick="Forge.editTask('${t.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+        <button class="icon-btn" onclick="Forge.deleteTask('${t.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0l1 14h8l1-14"/></svg></button>
+      </div>` : ''}
+    </div>`;
+  }
+  function renderTasks(){
+    const done = state.tasks.filter(t=>t.done).length;
+    $('#taskProgressLine').textContent = `${done} of ${state.tasks.length} done`;
+    $('#taskBarMain').style.width = pct(done, state.tasks.length) + '%';
+    const cats = ['All','College','Gym','Personal','Coding','Health'];
+    $('#taskFilterRow').innerHTML = cats.map(c=>`<button class="pill ${c===taskFilter?'active':''}" onclick="Forge.setTaskFilter('${c}')">${c}</button>`).join('');
+    const list = taskFilter==='All' ? state.tasks : state.tasks.filter(t=>t.category===taskFilter);
+    $('#taskListFull').innerHTML = list.length ? list.map(t=>taskRowHTML(t,true)).join('') : `<div class="empty-state">Nothing here. Add a task with +.</div>`;
+  }
+  function setTaskFilter(c){ taskFilter=c; renderTasks(); }
+  function toggleTask(id){ const t=state.tasks.find(t=>t.id===id); if(!t)return; t.done=!t.done; persist(); renderAll(); }
+  function deleteTask(id){ state.tasks=state.tasks.filter(t=>t.id!==id); persist(); renderAll(); toast('Task deleted'); }
+  function editTask(id){
+    const t=state.tasks.find(t=>t.id===id); if(!t) return;
+    $('#taskModalTitle').textContent='Edit task'; $('#taskEditId').value=id; $('#taskText').value=t.text;
+    setSeg('#taskCatSeg', t.category); setSeg('#taskPriSeg', t.priority);
+    openModal('taskModalBackdrop');
+  }
+  function setSeg(sel, value){ $all(sel+' button').forEach(b=>b.classList.toggle('active', b.dataset.v===value)); }
+  function getSeg(sel){ const a=$(sel+' button.active'); return a ? a.dataset.v : $(sel+' button').dataset.v; }
+  function saveTask(){
+    const text=$('#taskText').value.trim(); if(!text){toast('Give the task a name');return;}
+    const category=getSeg('#taskCatSeg'), priority=getSeg('#taskPriSeg'), editId=$('#taskEditId').value;
+    if(editId){ Object.assign(state.tasks.find(t=>t.id===editId), {text,category,priority}); }
+    else{ state.tasks.push({id:uid(), text, category, priority, done:false}); }
+    persist(); closeModal('taskModalBackdrop'); renderAll(); toast('Task saved');
+  }
+
+  /* ------------------------- RENDER: Habits (unchanged from v1) ------------------------- */
+  function renderHabits(){
+    const done = state.habits.filter(h=>h.done).length;
+    $('#habitSub').textContent = `${done} of ${state.habits.length} done today`;
+    $('#habitList').innerHTML = state.habits.length ? state.habits.map(h=>`
+      <div class="item-row">
+        <button class="check ${h.done?'checked':''}" onclick="Forge.toggleHabit('${h.id}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round"><path d="M5 13l4 4L19 7"/></svg></button>
+        <div class="item-body"><div class="item-text ${h.done?'done':''}">${escapeHTML(h.name)}</div></div>
+        <button class="icon-btn" onclick="Forge.deleteHabit('${h.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0l1 14h8l1-14"/></svg></button>
+      </div>
+    `).join('') : `<div class="empty-state">No habits yet.</div>`;
+  }
+  function toggleHabit(id){ const h=state.habits.find(h=>h.id===id); if(!h)return; h.done=!h.done; persist(); renderAll(); }
+  function deleteHabit(id){ state.habits=state.habits.filter(h=>h.id!==id); persist(); renderAll(); }
+  function openHabitModal(){ $('#habitText').value=''; openModal('habitModalBackdrop'); }
+  function saveHabit(){
+    const name=$('#habitText').value.trim(); if(!name){toast('Name the habit');return;}
+    state.habits.push({id:uid(), name, done:false}); persist(); closeModal('habitModalBackdrop'); renderAll(); toast('Habit added');
+  }
+
+  /* ------------------------- RENDER: Fuel / Nutrients (NEW, replaces fixed nutrition) ------------------------- */
+  function quickChipsForUnit(unit){
+    const u=(unit||'').trim().toLowerCase();
+    if(u==='l') return [0.25,0.5];
+    if(u==='ml') return [250,500];
+    if(u==='kcal') return [100,250];
+    if(u==='mg') return [50,100];
+    return [5,10];
+  }
+  function nutrientCardHTML(n, idx){
+    const p = pct(n.current, n.target);
+    const color = PALETTE[idx % PALETTE.length];
+    const chips = quickChipsForUnit(n.unit).map(amt=>`<button class="chip" onclick="Forge.addToNutrient('${n.id}',${amt})">+${amt}${escapeHTML(n.unit)}</button>`).join('');
+    return `
+    <div class="card">
+      <div class="card-title">${escapeHTML(n.name)} <span class="hint">${n.current}/${n.target}${escapeHTML(n.unit)}</span></div>
+      <div class="pbar-track"><div class="pbar-fill" style="background:${color};width:${p}%;"></div></div>
+      <div class="chip-row">
+        ${chips}
+        <input type="number" class="chip-input" id="nutInput-${n.id}" placeholder="custom">
+        <button class="chip" onclick="Forge.addCustomToNutrient('${n.id}')">Add</button>
+      </div>
+      <div class="row-actions" style="margin-top:10px;">
+        <button class="icon-btn" onclick="Forge.editNutrient('${n.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+        <button class="icon-btn" onclick="Forge.deleteNutrient('${n.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0l1 14h8l1-14"/></svg></button>
+      </div>
+    </div>`;
+  }
+  function renderNutrition(){
+    $('#nutrientCards').innerHTML = state.nutrients.length
+      ? state.nutrients.map((n,idx)=>nutrientCardHTML(n,idx)).join('')
+      : `<div class="empty-state">No nutrients yet. Tap "+ Add nutrient" below.</div>`;
+  }
+  function openNutrientModalNew(){
+    $('#nutrientModalTitle').textContent='Add nutrient'; $('#nutEditId').value='';
+    $('#nutNameInput').value=''; $('#nutTargetInput').value=''; $('#nutUnitInput').value=''; $('#nutCurrentInput').value='0';
+    openModal('nutrientModalBackdrop');
+  }
+  function editNutrient(id){
+    const n=state.nutrients.find(n=>n.id===id); if(!n) return;
+    $('#nutrientModalTitle').textContent='Edit nutrient'; $('#nutEditId').value=id;
+    $('#nutNameInput').value=n.name; $('#nutTargetInput').value=n.target; $('#nutUnitInput').value=n.unit; $('#nutCurrentInput').value=n.current;
+    openModal('nutrientModalBackdrop');
+  }
+  function saveNutrient(){
+    const name=$('#nutNameInput').value.trim(); if(!name){toast('Name the nutrient');return;}
+    const target=parseFloat($('#nutTargetInput').value)||0;
+    const unit=$('#nutUnitInput').value.trim()||'unit';
+    const current=parseFloat($('#nutCurrentInput').value)||0;
+    const editId=$('#nutEditId').value;
+    if(editId){ Object.assign(state.nutrients.find(n=>n.id===editId), {name,target,unit,current}); }
+    else{ state.nutrients.push({id:uid(), name, target, unit, current}); }
+    persist(); closeModal('nutrientModalBackdrop'); renderAll(); toast('Nutrient saved');
+  }
+  function deleteNutrient(id){ state.nutrients=state.nutrients.filter(n=>n.id!==id); persist(); renderAll(); }
+  function addToNutrient(id, amt){
+    const n=state.nutrients.find(n=>n.id===id); if(!n) return;
+    n.current = Math.max(0, round1(n.current+Number(amt)));
+    persist(); renderAll();
+  }
+  function addCustomToNutrient(id){
+    const el=$('#nutInput-'+id); const v=parseFloat(el.value);
+    if(!v){ toast('Enter an amount'); return; }
+    addToNutrient(id, v); el.value='';
+  }
+
+  /* ------------------------- RENDER: Gym ------------------------- */
+  let gymSubView = 'log';
+  function setGymSub(v){
+    gymSubView=v;
+    ['log','routine','records'].forEach(s=>{ $('#gymSub-'+s).style.display = s===v?'block':'none'; });
+    $all('#gymSubNav .pill').forEach(b=>b.classList.toggle('active', b.dataset.sub===v));
+    if(v==='routine') renderRoutine();
+    if(v==='records') renderPRs();
+  }
+  function renderGym(){
+    const bw = state.bodyweight;
+    $('#bwLatest').textContent = bw.length ? `latest ${bw[bw.length-1].weight}kg` : '';
+    const log = [...state.workouts].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
+    $('#gymLog').innerHTML = log.length ? log.map(w=>{
+      const prevSessions = state.workouts.filter(x=>x.group===w.group && x.date<w.date).sort((a,b)=>b.date.localeCompare(a.date));
+      const prev = prevSessions[0];
+      return `
+      <div style="border-bottom:1px solid var(--border);padding:10px 0;">
+        <div class="flex-between"><b>${escapeHTML(w.group)}</b><span class="mono" style="font-size:11px;color:var(--text-faint);">${w.date}</span></div>
+        ${w.exercises.map((ex,exIdx)=>{
+          const maxW = Math.max(0,...ex.sets.map(s=>s.weight||0));
+          let delta='';
+          if(prev){
+            const prevEx = prev.exercises.find(e=>e.name===ex.name);
+            if(prevEx){
+              const prevMax = Math.max(0,...prevEx.sets.map(s=>s.weight||0));
+              const diff = maxW - prevMax;
+              if(diff!==0) delta = ` <span style="color:${diff>0?'var(--green)':'var(--red)'};font-size:11px;">${diff>0?'+':''}${diff}kg vs last</span>`;
+            }
+          }
+          return `<div style="font-size:13px;margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <span>${escapeHTML(ex.name)} — ${ex.sets.length}×${ex.sets.map(s=>s.reps).join('/')} @ ${maxW}kg${delta}</span>
+            <button class="btn btn-ghost btn-sm" onclick="Forge.promoteToPR('${w.id}',${exIdx})">Set as PR</button>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }).join('') : `<div class="empty-state">No sessions logged yet. Tap + to log your first workout.</div>`;
+  }
+
+  /* -------- Personal Records (manual, separate from logs) -------- */
+  function renderPRs(){
+    $('#prListFull').innerHTML = state.prs.length ? state.prs.map(p=>`
+      <div class="item-row">
+        <div class="item-body">
+          <div class="item-text">${escapeHTML(p.name)}</div>
+          <div class="item-meta"><span class="badge cat-Gym">${p.weight||0}${escapeHTML(p.unit||'kg')}</span>${p.date?`<span style="font-size:10px;color:var(--text-faint);">${p.date}</span>`:''}</div>
+        </div>
+        <div class="row-actions">
+          <button class="icon-btn" onclick="Forge.editPR('${p.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+          <button class="icon-btn" onclick="Forge.deletePR('${p.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0l1 14h8l1-14"/></svg></button>
+        </div>
+      </div>
+    `).join('') : `<div class="empty-state">No personal records yet. Tap + to add one.</div>`;
+  }
+  function openPRModalNew(){
+    $('#prModalTitle').textContent='Add personal record'; $('#prEditId').value='';
+    $('#prNameInput').value=''; $('#prWeightInput').value=''; $('#prUnitInput').value='kg';
+    openModal('prModalBackdrop');
+  }
+  function editPR(id){
+    const p=state.prs.find(p=>p.id===id); if(!p) return;
+    $('#prModalTitle').textContent='Edit personal record'; $('#prEditId').value=id;
+    $('#prNameInput').value=p.name; $('#prWeightInput').value=p.weight; $('#prUnitInput').value=p.unit||'kg';
+    openModal('prModalBackdrop');
+  }
+  function savePR(){
+    const name=$('#prNameInput').value.trim(); if(!name){toast('Name the exercise');return;}
+    const weight=parseFloat($('#prWeightInput').value)||0;
+    const unit=$('#prUnitInput').value.trim()||'kg';
+    const editId=$('#prEditId').value;
+    if(editId){ Object.assign(state.prs.find(p=>p.id===editId), {name,weight,unit,date:todayKey()}); }
+    else{ state.prs.push({id:uid(), name, weight, unit, date:todayKey()}); }
+    persist(); closeModal('prModalBackdrop'); renderAll(); toast('Personal record saved');
+  }
+  function deletePR(id){ state.prs=state.prs.filter(p=>p.id!==id); persist(); renderAll(); }
+  // Manual promotion only — logging a workout NEVER calls this automatically.
+  function promoteToPR(workoutId, exIdx){
+    const w=state.workouts.find(w=>w.id===workoutId); if(!w) return;
+    const ex=w.exercises[exIdx]; if(!ex) return;
+    const maxW = Math.max(0,...ex.sets.map(s=>s.weight||0));
+    const existing = state.prs.find(p=>p.name.toLowerCase()===ex.name.toLowerCase());
+    if(existing){ existing.weight=maxW; existing.unit=existing.unit||'kg'; existing.date=w.date; }
+    else{ state.prs.push({id:uid(), name:ex.name, weight:maxW, unit:'kg', date:w.date}); }
+    persist(); renderAll(); toast(`${ex.name} PR set to ${maxW}kg`);
+  }
+  function logBodyweight(){
+    const v=parseFloat($('#bwInput').value); if(!v){toast('Enter your weight');return;}
+    const today=todayKey(); const existing=state.bodyweight.find(b=>b.date===today);
+    if(existing) existing.weight=v; else state.bodyweight.push({date:today, weight:v});
+    $('#bwInput').value=''; persist(); renderAll(); toast('Body weight logged');
+  }
+
+  /* -------- Routine builder (weekly template, independent of daily logs) -------- */
+  let routineActiveDay = new Date().toLocaleDateString('en-US',{weekday:'long'});
+  let routineExerciseDraft = [''];
+  function renderRoutine(){
+    $('#routineDayNav').innerHTML = DAYS.map(d=>`<button class="pill ${d===routineActiveDay?'active':''}" onclick="Forge.setRoutineDay('${d}')">${d.slice(0,3)}</button>`).join('');
+    const blocks = state.routines[routineActiveDay] || [];
+    $('#routineBlockList').innerHTML = blocks.length ? blocks.map((b,idx)=>`
+      <div class="card">
+        <div class="flex-between">
+          <b>${escapeHTML(b.group)}</b>
+          <div class="row-actions">
+            <button class="icon-btn sm" onclick="Forge.moveRoutineBlock('${routineActiveDay}',${idx},-1)">↑</button>
+            <button class="icon-btn sm" onclick="Forge.moveRoutineBlock('${routineActiveDay}',${idx},1)">↓</button>
+            <button class="icon-btn sm" onclick="Forge.openRoutineModal('${routineActiveDay}',${idx})">✎</button>
+            <button class="icon-btn sm" onclick="Forge.deleteRoutineBlock('${routineActiveDay}',${idx})">🗑</button>
+          </div>
+        </div>
+        <div style="font-size:13px;color:var(--text-dim);margin-top:8px;">${b.exercises.length ? b.exercises.map(escapeHTML).join(' • ') : 'No exercises added yet'}</div>
+      </div>
+    `).join('') : `<div class="empty-state">No routine set for ${routineActiveDay}. Tap + to add a muscle group.</div>`;
+  }
+  function setRoutineDay(d){ routineActiveDay=d; renderRoutine(); }
+  function moveRoutineBlock(day, idx, dir){
+    const arr=state.routines[day]; const ni=idx+dir;
+    if(ni<0 || ni>=arr.length) return;
+    [arr[idx], arr[ni]] = [arr[ni], arr[idx]];
+    persist(); renderRoutine();
+  }
+  function deleteRoutineBlock(day, idx){ state.routines[day].splice(idx,1); persist(); renderRoutine(); }
+  function openRoutineModal(day, editIdx){
+    $('#routineEditDay').value = day;
+    $('#routineEditId').value = (editIdx!==undefined && editIdx!==null) ? editIdx : '';
+    if(editIdx!==undefined && editIdx!==null){
+      const b = state.routines[day][editIdx];
+      $('#routineModalTitle').textContent = 'Edit ' + day + ' block';
+      $('#routineGroupInput').value = b.group;
+      routineExerciseDraft = b.exercises.length ? [...b.exercises] : [''];
+    } else {
+      $('#routineModalTitle').textContent = 'Add ' + day + ' block';
+      $('#routineGroupInput').value = '';
+      routineExerciseDraft = [''];
+    }
+    renderRoutineExerciseInputs();
+    openModal('routineModalBackdrop');
+  }
+  function renderRoutineExerciseInputs(){
+    $('#routineExerciseInputs').innerHTML = routineExerciseDraft.map((name,i)=>`
+      <div class="routine-exercise-row">
+        <input value="${escapeHTML(name)}" oninput="Forge._setRoutineExercise(${i},this.value)" placeholder="Exercise name">
+        <button class="icon-btn sm" onclick="Forge._removeRoutineExercise(${i})">✕</button>
+      </div>`).join('');
+  }
+  function _setRoutineExercise(i,v){ routineExerciseDraft[i]=v; }
+  function _removeRoutineExercise(i){ routineExerciseDraft.splice(i,1); if(!routineExerciseDraft.length) routineExerciseDraft=['']; renderRoutineExerciseInputs(); }
+  function addRoutineExerciseInput(){ routineExerciseDraft.push(''); renderRoutineExerciseInputs(); }
+  function saveRoutineBlock(){
+    const day = $('#routineEditDay').value;
+    const group = $('#routineGroupInput').value.trim();
+    if(!group){ toast('Name the muscle group'); return; }
+    const exercises = routineExerciseDraft.map(s=>s.trim()).filter(Boolean);
+    const editIdxRaw = $('#routineEditId').value;
+    if(!state.routines[day]) state.routines[day]=[];
+    if(editIdxRaw!==''){
+      const idx = parseInt(editIdxRaw,10);
+      state.routines[day][idx] = {id: state.routines[day][idx].id, group, exercises};
+    } else {
+      state.routines[day].push({id:uid(), group, exercises});
+    }
+    persist(); closeModal('routineModalBackdrop'); renderAll(); toast('Routine saved');
+  }
+
+  /* -------- workout modal: dynamic exercise blocks + per-set rest timers -------- */
+  let exerciseDraft = [];
+  const timers = {}; // key `${blockIdx}-${setIdx}` -> {remaining,total,running,intervalId}
+
+  function timerKey(i,j){ return i+'-'+j; }
+  function resetAllTimers(){
+    Object.values(timers).forEach(t=>{ if(t.intervalId) clearInterval(t.intervalId); });
+    Object.keys(timers).forEach(k=>delete timers[k]);
+  }
+  function ensureTimer(i,j){
+    const k=timerKey(i,j);
+    if(!timers[k]){
+      const total = (exerciseDraft[i] && exerciseDraft[i].sets[j] && exerciseDraft[i].sets[j].rest) || 60;
+      timers[k] = {remaining:total, total, running:false, intervalId:null};
+    }
+    return timers[k];
+  }
+  function updateTimerDisplay(i,j){
+    const t=timers[timerKey(i,j)]; if(!t) return;
+    const el=document.getElementById(`timerDisplay-${i}-${j}`); if(!el) return;
+    const m=Math.floor(t.remaining/60), s=t.remaining%60;
+    el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+  function updateToggleBtn(i,j){
+    const btn=document.getElementById(`timerToggle-${i}-${j}`); if(!btn) return;
+    const t=timers[timerKey(i,j)];
+    btn.textContent = (t && t.running) ? '⏸' : '▶';
+  }
+  function playBeep(){
+    try{
+      const ctx = new (window.AudioContext||window.webkitAudioContext)();
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type='sine'; o.frequency.value=880;
+      o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.2, ctx.currentTime);
+      o.start(); o.stop(ctx.currentTime+0.35);
+      setTimeout(()=>ctx.close(), 500);
+    }catch(e){ /* audio blocked or unsupported — silently skip, vibration still fires */ }
+  }
+  function timerToggle(i,j){
+    const t = ensureTimer(i,j);
+    if(t.running){
+      clearInterval(t.intervalId); t.intervalId=null; t.running=false;
+    } else {
+      t.running=true;
+      t.intervalId = setInterval(()=>{
+        t.remaining--;
+        updateTimerDisplay(i,j);
+        if(t.remaining<=0){
+          clearInterval(t.intervalId); t.intervalId=null; t.running=false; t.remaining=0;
+          updateTimerDisplay(i,j); updateToggleBtn(i,j);
+          playBeep();
+          if(navigator.vibrate) navigator.vibrate([200,100,200]);
+        }
+      }, 1000);
+    }
+    updateToggleBtn(i,j);
+  }
+  function timerReset(i,j){
+    const t = ensureTimer(i,j);
+    if(t.intervalId) clearInterval(t.intervalId);
+    t.remaining = t.total; t.running=false; t.intervalId=null;
+    updateTimerDisplay(i,j); updateToggleBtn(i,j);
+  }
+  function _setRestDuration(i,j,val){
+    const custom = document.getElementById(`restCustom-${i}-${j}`);
+    if(val==='custom'){ if(custom) custom.style.display='inline-block'; return; }
+    const secs = parseInt(val,10)||60;
+    if(!exerciseDraft[i] || !exerciseDraft[i].sets[j]) return;
+    exerciseDraft[i].sets[j].rest = secs;
+    const t = ensureTimer(i,j);
+    if(!t.running){ t.total=secs; t.remaining=secs; updateTimerDisplay(i,j); }
+  }
+
+  function openWorkoutModal(){
+    resetAllTimers();
+    exerciseDraft = [{name:'', sets:[{reps:'',weight:'',rest:60}]}];
+    populateLoadRoutineChips();
+    renderExerciseBlocks();
+    openModal('workoutModalBackdrop');
+  }
+  function populateLoadRoutineChips(){
+    const dayName = new Date().toLocaleDateString('en-US',{weekday:'long'});
+    const blocks = state.routines[dayName] || [];
+    const el = $('#loadRoutineChips');
+    el.innerHTML = blocks.length
+      ? `<span style="font-size:11px;color:var(--text-faint);align-self:center;">Load from ${dayName}:</span>` + blocks.map((b,idx)=>`<button class="chip" onclick="Forge.loadRoutineBlock('${dayName}',${idx})">${escapeHTML(b.group)}</button>`).join('')
+      : '';
+  }
+  function ensureGroupOption(name){
+    const sel = $('#workoutGroup');
+    if(![...sel.options].some(o=>o.value===name)){
+      const opt = document.createElement('option'); opt.value=name; opt.textContent=name; sel.appendChild(opt);
+    }
+  }
+  function loadRoutineBlock(day, idx){
+    const block = (state.routines[day]||[])[idx]; if(!block) return;
+    ensureGroupOption(block.group);
+    $('#workoutGroup').value = block.group;
+    resetAllTimers();
+    exerciseDraft = block.exercises.length
+      ? block.exercises.map(name=>({name, sets:[{reps:'',weight:'',rest:60}]}))
+      : [{name:'', sets:[{reps:'',weight:'',rest:60}]}];
+    renderExerciseBlocks();
+    toast('Loaded ' + block.group);
+  }
+  function renderExerciseBlocks(){
+    $('#exerciseBlocks').innerHTML = exerciseDraft.map((ex,i)=>`
+      <div class="exercise-block">
+        <div class="field mb0" style="margin-bottom:8px;">
+          <input placeholder="Exercise name" value="${escapeHTML(ex.name)}" oninput="Forge._setExName(${i}, this.value)">
+        </div>
+        ${ex.sets.map((s,j)=>`
+          <div class="set-row">
+            <span>${j+1}</span>
+            <input type="number" placeholder="reps" value="${s.reps}" oninput="Forge._setSetVal(${i},${j},'reps',this.value)">
+            <input type="number" placeholder="kg" value="${s.weight}" oninput="Forge._setSetVal(${i},${j},'weight',this.value)">
+          </div>
+          <div class="timer-row">
+            <select onchange="Forge._setRestDuration(${i},${j},this.value)">
+              <option value="30">30s</option><option value="60" selected>60s</option><option value="90">90s</option><option value="120">120s</option><option value="custom">Custom</option>
+            </select>
+            <input type="number" id="restCustom-${i}-${j}" style="display:none;" placeholder="sec" oninput="Forge._setRestDuration(${i},${j},this.value)">
+            <span class="timer-display mono" id="timerDisplay-${i}-${j}">01:00</span>
+            <button class="icon-btn sm" id="timerToggle-${i}-${j}" onclick="Forge.timerToggle(${i},${j})">▶</button>
+            <button class="icon-btn sm" onclick="Forge.timerReset(${i},${j})">↺</button>
+          </div>
+        `).join('')}
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-ghost btn-sm" onclick="Forge._addSet(${i})">+ Set</button>
+          <button class="btn btn-danger btn-sm" onclick="Forge._removeExercise(${i})">Remove exercise</button>
+        </div>
+      </div>
+    `).join('');
+  }
+  function addExerciseBlock(){ resetAllTimers(); exerciseDraft.push({name:'', sets:[{reps:'',weight:'',rest:60}]}); renderExerciseBlocks(); }
+  function _setExName(i,v){ exerciseDraft[i].name=v; }
+  function _setSetVal(i,j,field,v){ exerciseDraft[i].sets[j][field] = field==='weight'?(parseFloat(v)||0):(parseInt(v,10)||0); }
+  function _addSet(i){ resetAllTimers(); exerciseDraft[i].sets.push({reps:'',weight:'',rest:60}); renderExerciseBlocks(); }
+  function _removeExercise(i){ resetAllTimers(); exerciseDraft.splice(i,1); renderExerciseBlocks(); }
+  function saveWorkout(){
+    const group = $('#workoutGroup').value;
+    const exercises = exerciseDraft.filter(e=>e.name.trim()).map(e=>({
+      name: e.name.trim(),
+      sets: e.sets.filter(s=>s.reps||s.weight).map(s=>({reps:s.reps||0, weight:s.weight||0}))
+    })).filter(e=>e.sets.length);
+    if(!exercises.length){ toast('Add at least one exercise with a set'); return; }
+    const today = todayKey();
+    const existingIdx = state.workouts.findIndex(w=>w.date===today && w.group===group);
+    const entry = {id:uid(), date:today, group, exercises};
+    if(existingIdx>-1) state.workouts[existingIdx]=entry; else state.workouts.push(entry);
+    resetAllTimers();
+    persist(); closeModal('workoutModalBackdrop'); renderAll(); toast('Workout logged');
+  }
+
+  /* ------------------------- RENDER: Stats ------------------------- */
+  function lastNDays(n){
+    const days=[]; const d=new Date();
+    for(let i=n-1;i>=0;i--){ const dd=new Date(d); dd.setDate(d.getDate()-i); days.push(todayKey(dd)); }
+    return days;
+  }
+  function drawBarChart(svgEl, points, color){
+    const w = svgEl.clientWidth || 320, h=120, pad=18;
+    const max = Math.max(1, ...points.map(p=>p.v));
+    const barW = (w-pad*2)/points.length;
+    let html='';
+    points.forEach((p,i)=>{
+      const bh = (p.v/max)*(h-40);
+      const x = pad+i*barW, y = h-24-bh;
+      html += `<rect x="${x+barW*0.15}" y="${y}" width="${barW*0.7}" height="${bh}" rx="3" fill="${color}"/>`;
+      html += `<text x="${x+barW/2}" y="${h-8}" font-size="8.5" fill="#5A6470" text-anchor="middle" font-family="monospace">${p.label}</text>`;
+    });
+    svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    svgEl.innerHTML = html;
+  }
+  function renderStats(){
+    const days = lastNDays(14);
+    const p = computeCategoryPcts();
+    const points = days.map(d=>{
+      if(d===todayKey()) return {label:d.slice(8), v:p.overall};
+      const h = state.history[d];
+      return {label:d.slice(8), v: h ? h.overallPct : 0};
+    });
+    drawBarChart($('#chartCompletion'), points, '#3ED8C3');
+
+    const wpoints = days.filter(d=>state.history[d]?.bodyweight || (d===todayKey() && state.bodyweight.length))
+      .map(d=>{
+        if(d===todayKey() && state.bodyweight.length) return {label:d.slice(8), v: state.bodyweight[state.bodyweight.length-1].weight};
+        return {label:d.slice(8), v: state.history[d].bodyweight};
+      });
+    if(wpoints.length){ drawBarChart($('#chartWeight'), wpoints, '#4FA6E8'); }
+    else { $('#chartWeight').innerHTML = `<text x="10" y="60" font-size="11" fill="#5A6470">Log body weight to see this trend</text>`; }
+
+    const last7 = lastNDays(7);
+    const sessionDays = new Set(state.workouts.map(w=>w.date));
+    const hitDays = last7.filter(d=>sessionDays.has(d)).length;
+    $('#workoutConsistency').innerHTML = `
+      <div class="stat-row"><span>Sessions this week</span><b>${hitDays}/7</b></div>
+      <div class="pbar-track"><div class="pbar-fill" style="background:var(--amber);width:${pct(hitDays,7)}%;"></div></div>
+    `;
+
+    $('#habitStreaks').innerHTML = state.habits.map(h=>`
+      <div class="flex-between" style="padding:6px 0;"><span style="font-size:13px;">${escapeHTML(h.name)}</span>
+      <span class="mono" style="font-size:12px;color:${h.done?'var(--green)':'var(--text-faint)'};">${h.done?'done today':'pending'}</span></div>
+    `).join('');
+
+    const monthDays = Object.keys(state.history).filter(d=>d.slice(0,7)===todayKey().slice(0,7));
+    const avgMonth = monthDays.length ? Math.round(monthDays.reduce((s,d)=>s+state.history[d].overallPct,0)/monthDays.length) : p.overall;
+    const workoutsMonth = state.workouts.filter(w=>w.date.slice(0,7)===todayKey().slice(0,7)).length;
+    $('#monthlyTiles').innerHTML = `
+      <div class="tile"><div class="tv">${avgMonth}%</div><div class="tl">Avg completion</div></div>
+      <div class="tile"><div class="tv">${workoutsMonth}</div><div class="tl">Workouts logged</div></div>
+      <div class="tile"><div class="tv">${state.streak.count}</div><div class="tl">Best streak now</div></div>
+      <div class="tile"><div class="tv">${state.bodyweight.length}</div><div class="tl">Weigh-ins</div></div>
+    `;
+  }
+
+  /* ------------------------- modal helpers ------------------------- */
+  function openModal(id){ $('#'+id).classList.add('open'); }
+  function closeModal(id){
+    $('#'+id).classList.remove('open');
+    if(id==='workoutModalBackdrop') resetAllTimers();
+  }
+
+  /* ------------------------- nav / view switching ------------------------- */
+  function switchView(name){
+    $all('.view').forEach(v=>v.classList.remove('active'));
+    $('#view-'+name).classList.add('active');
+    $all('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
+    renderAll();
+  }
+  function renderAll(){
+    renderDashboard();
+    renderTasks();
+    renderHabits();
+    renderNutrition();
+    renderGym();
+    if(gymSubView==='routine') renderRoutine();
+    if(gymSubView==='records') renderPRs();
+    renderStats();
+  }
+
+  /* ------------------------- init ------------------------- */
+  function init(){
+    loadAll();
+    runMigrations();
+    runRollover();
+
+    const now = new Date();
+    $('#eyebrowDate').textContent = now.toLocaleDateString(undefined,{weekday:'long'});
+    $('#subDate').textContent = now.toLocaleDateString(undefined,{month:'long', day:'numeric', year:'numeric'});
+
+    $all('.tabbtn').forEach(b=>b.addEventListener('click', ()=>switchView(b.dataset.view)));
+
+    $('#fabBtn').addEventListener('click', ()=>{
+      const active = $('.view.active').id;
+      if(active==='view-gym'){
+        if(gymSubView==='routine') openRoutineModal(routineActiveDay);
+        else if(gymSubView==='records') openPRModalNew();
+        else openWorkoutModal();
+      }
+      else if(active==='view-habits'){ openHabitModal(); }
+      else if(active==='view-nutrition'){ openNutrientModalNew(); }
+      else { openTaskModalNew(); }
+    });
+
+    $all('#taskCatSeg button').forEach(b=>b.addEventListener('click', ()=>setSeg('#taskCatSeg', b.dataset.v)));
+    $all('#taskPriSeg button').forEach(b=>b.addEventListener('click', ()=>setSeg('#taskPriSeg', b.dataset.v)));
+    $all('.modal-backdrop').forEach(m=>m.addEventListener('click', e=>{ if(e.target===m){ m.classList.remove('open'); if(m.id==='workoutModalBackdrop') resetAllTimers(); } }));
+
+    renderAll();
+
+    // best-effort service worker registration — only meaningful when served over http(s), e.g. GitHub Pages.
+    if('serviceWorker' in navigator && location.protocol !== 'file:'){
+      navigator.serviceWorker.register('./sw.js').catch(()=>{ /* sw.js optional */ });
+    }
+  }
+  function openTaskModalNew(){
+    $('#taskModalTitle').textContent='New task'; $('#taskEditId').value=''; $('#taskText').value='';
+    setSeg('#taskCatSeg','College'); setSeg('#taskPriSeg','Medium');
+    openModal('taskModalBackdrop');
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+
+  /* ------------------------- public API ------------------------- */
+  return {
+    switchView, toggleTask, deleteTask, editTask, saveTask, setTaskFilter,
+    toggleHabit, deleteHabit, openHabitModal, saveHabit,
+    openNutrientModalNew, editNutrient, saveNutrient, deleteNutrient, addToNutrient, addCustomToNutrient,
+    logBodyweight, promoteToPR,
+    setGymSub,
+    openWorkoutModal, addExerciseBlock, saveWorkout, loadRoutineBlock,
+    _setExName, _setSetVal, _addSet, _removeExercise, _setRestDuration,
+    timerToggle, timerReset,
+    setRoutineDay, openRoutineModal, saveRoutineBlock, moveRoutineBlock, deleteRoutineBlock,
+    addRoutineExerciseInput, _setRoutineExercise, _removeRoutineExercise,
+    openPRModalNew, editPR, savePR, deletePR,
+    refreshQuote,
+    closeModal,
+  };
+})();
+</script>
+</body>
+</html>
