@@ -9,33 +9,43 @@
 <meta name="mobile-web-app-capable" content="yes">
 <title>Forge — Daily Dashboard</title>
 <!--
-  FORGE — personal productivity + gym dashboard. Single-file app, v2.
+  FORGE — personal productivity + gym dashboard. Single-file app, v3.
   No external libraries, no network calls, no login.
 
-  DATA MODEL (v2)
-  ----------------
-  forge_tasks      : [{id, text, category, priority, done}]        — unchanged from v1
-  forge_habits     : [{id, name, done}]                             — unchanged from v1
-  forge_nutrients  : [{id, name, unit, target, current}]            — NEW, replaces forge_nutrition/forge_targets
-  forge_prs        : [{id, name, weight, unit, date}]                — NEW, manual personal records
-  forge_routines   : {Monday:[{id,group,exercises:[names]}], ...}    — NEW, weekly routine templates
-  forge_workoutsLog: [{id, date, group, exercises:[{name, sets:[{reps, weight}]}]}] — unchanged shape
-  forge_bodyweight : [{date, weight}]                                — unchanged
-  forge_history    : {"YYYY-MM-DD": {taskPct, habitPct, nutritionPct, workoutDone, overallPct, bodyweight}}
-  forge_streak     : {count, lastDate}
-  forge_lastActive : "YYYY-MM-DD"
-  forge_quoteOverride : {date, index}                                — NEW, manual "refresh quote" persists for the day
+  DATA MODEL (v3) — Gym module restructure
+  ------------------------------------------
+  forge_routines : {
+    Monday: [
+      { id, group,
+        exercises: [
+          { id, name, notes,
+            sets: [ { id, reps, weight, rest, done } ]   <- reps/weight/done are LIVE session data
+          }
+        ]
+      }
+    ], ... (all 7 days)
+  }
+  This is the ONLY place workouts are logged now. There is no separate "Log Recent
+  Session" page/modal anymore. A routine exercise has two layers baked into one
+  object: the template (name, how many sets, rest durations) which persists forever,
+  and the live session values (reps/weight/done/notes) for whichever day is
+  currently in progress. At midnight rollover, if the weekday that just ended has
+  any sets with data entered, that data is archived into forge_workoutsLog (history,
+  read-only from then on) and the live fields are cleared back to empty — ready for
+  the next time that weekday comes around. Set count and rest durations are NOT
+  cleared, since those are template configuration, not session data.
 
-  MIGRATION: on first load after this update, if forge_nutrients doesn't exist yet,
-  it is built from the old forge_nutrition + forge_targets values (if present) so
-  your current water/calorie/protein numbers are not lost. Old keys are left on disk,
-  unused, harmless.
+  forge_workoutsLog : [{id, date, group, exercises:[{name, sets:[{reps, weight}]}]}]
+    — append-only history, written only by the rollover archival step described above.
+  forge_prs        : [{id, name, weight, unit, date}]  — manual personal records, unchanged.
+  forge_bodyweight : [{date, weight}] — unchanged data, UI moved from Log tab to Records tab.
+  forge_tasks / forge_habits / forge_nutrients / forge_history / forge_streak / forge_lastActive
+    — all unchanged from the previous version.
 
-  ROLLOVER: unchanged behavior — at midnight, yesterday's completion is snapshotted
-  into forge_history, the streak updates (continues only if yesterday's overall
-  completion was >= 80%), then tasks/habits "done" flags and all nutrient "current"
-  values reset to 0. Templates themselves (task list, habit list, nutrient defs,
-  routines, PRs) are never touched by rollover.
+  MIGRATION: routines saved by the previous version stored exercises as plain
+  name strings with no sets at all. On load, any such string is upgraded in place
+  to {id, name, notes:'', sets:[one empty set, 60s rest]} — nothing is lost,
+  you just get one blank set to start logging into.
 -->
 <style>
 :root{
@@ -129,6 +139,7 @@ input,select,textarea{font-family:inherit;}
 .icon-btn{width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--bg-elev);display:flex;align-items:center;justify-content:center;color:var(--text-dim);flex-shrink:0;font-size:14px;}
 .icon-btn svg{width:16px;height:16px;}
 .icon-btn.sm{width:28px;height:28px;font-size:12px;}
+.icon-btn.wide{width:auto;padding:0 10px;font-size:11px;font-weight:700;}
 .row-actions{display:flex;gap:6px;}
 
 .btn{border:none;border-radius:var(--radius-sm);padding:13px 18px;font-size:14.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px;width:100%;}
@@ -171,17 +182,20 @@ input,select,textarea{font-family:inherit;}
 .seg button{flex:1;padding:10px 6px;background:none;border:none;color:var(--text-dim);font-size:13px;font-weight:600;}
 .seg button.active{background:var(--teal);color:#062420;}
 .modal-actions{display:flex;gap:10px;margin-top:16px;}
-.exercise-block{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;}
+
+.block-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;}
+.block-group-input{background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-weight:700;font-size:14px;color:var(--text);flex:1;margin-right:8px;}
+.exercise-block{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;}
+.exercise-name-input{flex:1;margin-right:8px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 10px;color:var(--text);font-size:14px;font-weight:600;}
+.exercise-notes-input{margin-bottom:8px;font-size:12.5px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text-dim);width:100%;}
 .set-row{display:flex;gap:8px;align-items:center;margin-top:6px;}
-.set-row span{font-size:11px;color:var(--text-faint);width:16px;font-family:var(--font-mono);}
-.set-row input{flex:1;}
-.timer-row{display:flex;gap:6px;align-items:center;margin:6px 0 4px 24px;flex-wrap:wrap;}
-.timer-row select{width:auto;padding:6px 8px;font-size:12px;background:var(--bg-elev);}
-.timer-row input{width:56px!important;flex:none!important;padding:6px 8px;font-size:12px;}
-.timer-display{font-size:13px;font-weight:700;color:var(--teal);min-width:44px;}
+.set-row span.set-num{font-size:11px;color:var(--text-faint);width:14px;font-family:var(--font-mono);flex-shrink:0;}
+.set-row input{flex:1;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px 8px;color:var(--text);font-size:13.5px;min-width:0;}
+.timer-row{display:flex;gap:6px;align-items:center;margin:6px 0 10px 22px;flex-wrap:wrap;}
+.timer-row select{width:auto;padding:6px 8px;font-size:12px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);}
+.timer-row input{width:56px!important;flex:none!important;padding:6px 8px;font-size:12px;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);}
+.timer-display{font-size:13px;font-weight:700;color:var(--teal);min-width:44px;font-family:var(--font-mono);}
 .pr-tag{background:rgba(245,167,66,.18);color:var(--amber);font-size:10px;padding:2px 6px;border-radius:6px;font-weight:700;margin-left:6px;}
-.routine-exercise-row{display:flex;gap:6px;margin-bottom:6px;}
-.routine-exercise-row input{flex:1;}
 
 #toast{position:fixed;bottom:calc(90px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%) translateY(20px);background:var(--card-hi);border:1px solid var(--border);color:var(--text);padding:11px 18px;border-radius:99px;font-size:13px;z-index:60;opacity:0;pointer-events:none;transition:all .25s ease;box-shadow:0 6px 20px rgba(0,0,0,.4);}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
@@ -235,7 +249,7 @@ input,select,textarea{font-family:inherit;}
   </div>
 
   <div class="card">
-    <div class="card-title">Today's workout</div>
+    <div class="card-title">Today's workout <span class="hint" id="dashWorkoutHint"></span></div>
     <div id="dashWorkout"></div>
   </div>
 
@@ -261,16 +275,19 @@ input,select,textarea{font-family:inherit;}
 
 <!-- ============ GYM ============ -->
 <section class="view" id="view-gym">
-  <div class="section-head"><div><h2>Gym</h2><div class="section-sub">Log it, plan it, beat it next time</div></div></div>
+  <div class="section-head"><div><h2>Gym</h2><div class="section-sub">Your routine IS your log now</div></div></div>
 
   <div class="pill-row" id="gymSubNav">
-    <button class="pill active" data-sub="log" onclick="Forge.setGymSub('log')">Log</button>
-    <button class="pill" data-sub="routine" onclick="Forge.setGymSub('routine')">Routine</button>
+    <button class="pill active" data-sub="routine" onclick="Forge.setGymSub('routine')">Routine</button>
     <button class="pill" data-sub="records" onclick="Forge.setGymSub('records')">Records</button>
   </div>
 
-  <!-- Log sub-view -->
-  <div id="gymSub-log">
+  <div id="gymSub-routine">
+    <div class="pill-row" id="routineDayNav"></div>
+    <div id="routineBlockList"></div>
+  </div>
+
+  <div id="gymSub-records" style="display:none;">
     <div class="card">
       <div class="card-title">Body weight <span class="hint" id="bwLatest"></span></div>
       <div class="field-row">
@@ -278,21 +295,8 @@ input,select,textarea{font-family:inherit;}
         <button class="btn btn-primary btn-sm" onclick="Forge.logBodyweight()">Log</button>
       </div>
     </div>
-    <div class="card">
-      <div class="card-title">Recent sessions</div>
-      <div id="gymLog"></div>
-    </div>
-  </div>
-
-  <!-- Routine sub-view -->
-  <div id="gymSub-routine" style="display:none;">
-    <div class="pill-row" id="routineDayNav"></div>
-    <div id="routineBlockList"></div>
-  </div>
-
-  <!-- Records sub-view -->
-  <div id="gymSub-records" style="display:none;">
     <div class="card"><div class="card-title">Personal records</div><div id="prListFull"></div></div>
+    <div class="card"><div class="card-title">Workout history</div><div id="gymLog"></div></div>
   </div>
 </section>
 
@@ -363,38 +367,6 @@ input,select,textarea{font-family:inherit;}
   </div>
 </div>
 
-<div class="modal-backdrop" id="workoutModalBackdrop">
-  <div class="modal">
-    <h3>Log workout</h3>
-    <div class="field"><label>Muscle group</label>
-      <select id="workoutGroup"><option>Chest</option><option>Back</option><option>Legs</option><option>Shoulders</option><option>Arms</option><option>Core</option><option>Full Body</option><option>Cardio</option></select>
-    </div>
-    <div class="chip-row" id="loadRoutineChips"></div>
-    <div id="exerciseBlocks"></div>
-    <button class="btn btn-ghost" onclick="Forge.addExerciseBlock()">+ Add exercise</button>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="Forge.closeModal('workoutModalBackdrop')">Cancel</button>
-      <button class="btn btn-primary" onclick="Forge.saveWorkout()">Save workout</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-backdrop" id="routineModalBackdrop">
-  <div class="modal">
-    <h3 id="routineModalTitle">Add routine block</h3>
-    <input type="hidden" id="routineEditId">
-    <input type="hidden" id="routineEditDay">
-    <div class="field"><label>Muscle group</label><input id="routineGroupInput" placeholder="e.g. Chest, Triceps, Core..."></div>
-    <div class="field"><label>Exercises</label><div id="routineExerciseInputs"></div>
-      <button class="btn btn-ghost btn-sm" onclick="Forge.addRoutineExerciseInput()">+ Exercise</button>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="Forge.closeModal('routineModalBackdrop')">Cancel</button>
-      <button class="btn btn-primary" onclick="Forge.saveRoutineBlock()">Save</button>
-    </div>
-  </div>
-</div>
-
 <div class="modal-backdrop" id="prModalBackdrop">
   <div class="modal">
     <h3 id="prModalTitle">Add personal record</h3>
@@ -431,9 +403,6 @@ input,select,textarea{font-family:inherit;}
 <div id="toast"></div>
 
 <script>
-/* ==========================================================================
-   FORGE — vanilla JS, no frameworks, no build step. Namespaced under Forge.
-   ========================================================================== */
 const Forge = (function(){
 
   /* ------------------------- tiny utilities ------------------------- */
@@ -444,6 +413,11 @@ const Forge = (function(){
     const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
     return `${y}-${m}-${da}`;
   };
+  function weekdayNameFromKey(dateKey){
+    const [y,m,d] = dateKey.split('-').map(Number);
+    return new Date(y, m-1, d).toLocaleDateString('en-US',{weekday:'long'});
+  }
+  function todayWeekdayName(){ return weekdayNameFromKey(todayKey()); }
   const clamp = (n,a,b) => Math.max(a,Math.min(b,n));
   const pct = (num,den) => den>0 ? clamp(Math.round((num/den)*100),0,100) : 0;
   const round1 = n => Math.round(n*10)/10;
@@ -458,6 +432,7 @@ const Forge = (function(){
     toast._h = setTimeout(()=>t.classList.remove('show'), 1800);
   }
   function escapeHTML(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+  function formatMMSS(sec){ sec=Math.max(0,sec); const m=Math.floor(sec/60), s=sec%60; return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
 
   /* ------------------------- storage layer ------------------------- */
   const KEYS = {
@@ -466,7 +441,6 @@ const Forge = (function(){
     workouts:'forge_workoutsLog', bodyweight:'forge_bodyweight',
     history:'forge_history', streak:'forge_streak', lastActive:'forge_lastActive',
     quoteOverride:'forge_quoteOverride',
-    // legacy v1 keys, read-only, used for migration then left untouched
     legacyNutrition:'forge_nutrition', legacyTargets:'forge_targets'
   };
   function load(key, fallback){
@@ -491,7 +465,6 @@ const Forge = (function(){
   ];
   const DEFAULT_PR_NAMES = ['Bench Press','Squat','Deadlift','Shoulder Press','Barbell Row'];
 
-  /* ------------------------- 110 built-in quotes (offline, no lyrics/poetry) ------------------------- */
   const QUOTES = [
     ["Discipline is choosing between what you want now and what you want most.","Anon"],
     ["Motivation gets you started. Habit keeps you going.","Jim Rohn"],
@@ -602,9 +575,7 @@ const Forge = (function(){
     ["He that can have patience can have what he will.","Benjamin Franklin"],
     ["By failing to prepare, you are preparing to fail.","Benjamin Franklin"],
     ["What you get by achieving your goals is not as important as what you become by achieving them.","Zig Ziglar"],
-    ["The way to get started is to quit talking and begin doing.","Walt Disney"],
     ["You are never too old to set another goal or dream a new dream.","C.S. Lewis"],
-    ["It always seems impossible until it's done.","Nelson Mandela"],
     ["Turn your wounds into wisdom.","Oprah Winfrey"],
     ["Strive not to be a success, but rather to be of value.","Albert Einstein"],
     ["A little progress each day adds up to big results.","Anon"],
@@ -628,18 +599,10 @@ const Forge = (function(){
     state.streak = load(KEYS.streak, {count:0,lastDate:null});
   }
 
-  /* migration: build v2 stores from v1 data (or fresh defaults) exactly once */
   function runMigrations(){
     let changed = false;
-    if(state.prs === null){
-      state.prs = DEFAULT_PR_NAMES.map(name=>({id:uid(), name, weight:0, unit:'kg', date:null}));
-      changed = true;
-    }
-    if(state.routines === null){
-      state.routines = {};
-      DAYS.forEach(d=>state.routines[d]=[]);
-      changed = true;
-    }
+    if(state.prs === null){ state.prs = DEFAULT_PR_NAMES.map(name=>({id:uid(), name, weight:0, unit:'kg', date:null})); changed = true; }
+    if(state.routines === null){ state.routines = {}; DAYS.forEach(d=>state.routines[d]=[]); changed = true; }
     if(state.nutrients === null){
       const oldNutrition = load(KEYS.legacyNutrition, null);
       const oldTargets = load(KEYS.legacyTargets, null);
@@ -660,6 +623,27 @@ const Forge = (function(){
       }
       changed = true;
     }
+    DAYS.forEach(day=>{
+      if(!state.routines[day]) { state.routines[day]=[]; changed=true; }
+      state.routines[day].forEach(block=>{
+        if(!Array.isArray(block.exercises)) { block.exercises=[]; changed=true; return; }
+        block.exercises = block.exercises.map(ex=>{
+          if(typeof ex === 'string'){
+            changed = true;
+            return {id:uid(), name:ex, notes:'', sets:[{id:uid(), reps:'', weight:'', rest:60, done:false}]};
+          }
+          if(!ex.id){ ex.id=uid(); changed=true; }
+          if(ex.notes===undefined){ ex.notes=''; changed=true; }
+          if(!Array.isArray(ex.sets) || !ex.sets.length){ ex.sets=[{id:uid(), reps:'', weight:'', rest:60, done:false}]; changed=true; }
+          ex.sets.forEach(s=>{
+            if(!s.id){ s.id=uid(); changed=true; }
+            if(s.rest===undefined){ s.rest=60; changed=true; }
+            if(s.done===undefined){ s.done=false; changed=true; }
+          });
+          return ex;
+        });
+      });
+    });
     if(changed) persist();
   }
 
@@ -675,26 +659,38 @@ const Forge = (function(){
     save(KEYS.streak, state.streak);
   }
 
-  /* ------------------------- completion math ------------------------- */
-  function computeCategoryPcts(){
+  function computeWorkoutPctForDate(dateKey){
+    const dayName = weekdayNameFromKey(dateKey);
+    const blocks = state.routines[dayName] || [];
+    let total=0, done=0;
+    blocks.forEach(b=>b.exercises.forEach(ex=>{
+      total++;
+      if(ex.sets.some(s=>s.reps || s.weight)) done++;
+    }));
+    if(total===0){
+      return state.workouts.some(w=>w.date===dateKey) ? 100 : 0;
+    }
+    return pct(done, total);
+  }
+
+  function computeCategoryPcts(dateKeyOverride){
+    const dk = dateKeyOverride || todayKey();
     const taskPct = pct(state.tasks.filter(t=>t.done).length, state.tasks.length);
     const habitPct = pct(state.habits.filter(h=>h.done).length, state.habits.length);
     const nutrientPcts = state.nutrients.map(n=>pct(n.current, n.target));
     const nutritionPct = nutrientPcts.length ? Math.round(nutrientPcts.reduce((a,b)=>a+b,0)/nutrientPcts.length) : 0;
-    const workoutDoneToday = state.workouts.some(w=>w.date===todayKey());
-    const workoutPct = workoutDoneToday ? 100 : 0;
+    const workoutPct = computeWorkoutPctForDate(dk);
     const overall = Math.round((taskPct+habitPct+nutritionPct+workoutPct)/4);
     return {taskPct, habitPct, nutritionPct, workoutPct, overall};
   }
 
-  /* ------------------------- midnight rollover ------------------------- */
   function runRollover(){
     const today = todayKey();
     const last = load(KEYS.lastActive, null);
     if(last === today) return;
 
     if(last){
-      const p = computeCategoryPcts();
+      const p = computeCategoryPcts(last);
       state.history[last] = {
         taskPct:p.taskPct, habitPct:p.habitPct, nutritionPct:p.nutritionPct,
         workoutDone:p.workoutPct===100, overallPct:p.overall,
@@ -702,6 +698,23 @@ const Forge = (function(){
       };
       state.streak.count = p.overall >= 80 ? state.streak.count + 1 : 0;
       state.streak.lastDate = last;
+
+      const lastWeekday = weekdayNameFromKey(last);
+      const blocks = state.routines[lastWeekday] || [];
+      blocks.forEach(block=>{
+        const loggedExercises = [];
+        block.exercises.forEach(ex=>{
+          const loggedSets = ex.sets.filter(s=>s.reps || s.weight).map(s=>({reps:s.reps||0, weight:s.weight||0}));
+          if(loggedSets.length) loggedExercises.push({name:ex.name, sets:loggedSets});
+        });
+        if(loggedExercises.length){
+          state.workouts.push({id:uid(), date:last, group:block.group, exercises:loggedExercises});
+        }
+        block.exercises.forEach(ex=>{
+          ex.notes = '';
+          ex.sets.forEach(s=>{ clearTimerFor(ex.id, s.id); s.reps=''; s.weight=''; s.done=false; });
+        });
+      });
     }
 
     state.tasks.forEach(t=>t.done=false);
@@ -712,7 +725,6 @@ const Forge = (function(){
     persist();
   }
 
-  /* ------------------------- RENDER: Day Ring (4 categories) ------------------------- */
   function renderRing(){
     const p = computeCategoryPcts();
     const rings = [
@@ -738,7 +750,6 @@ const Forge = (function(){
     $('#ringLegend').innerHTML = rings.map(r=>`<div class="legend-row"><span class="legend-dot" style="background:${r.color}"></span>${r.label}<b>${r.pct}%</b></div>`).join('');
   }
 
-  /* ------------------------- RENDER: Dashboard ------------------------- */
   function renderDashboard(){
     runRollover();
     renderRing();
@@ -749,13 +760,27 @@ const Forge = (function(){
     $('#dashTaskBar').style.width = pct(doneCount, state.tasks.length) + '%';
     tl.innerHTML = state.tasks.length ? state.tasks.slice(0,4).map(t=>taskRowHTML(t,false)).join('') : `<div class="empty-state">No tasks yet. Tap + to add one.</div>`;
 
-    const w = state.workouts.find(w=>w.date===todayKey());
+    const dayName = todayWeekdayName();
+    const todaysBlocks = state.routines[dayName] || [];
     const wc = $('#dashWorkout');
-    wc.innerHTML = w
-      ? `<div class="badge cat-Gym" style="margin-bottom:8px;display:inline-block;">${escapeHTML(w.group)}</div>` + w.exercises.map(ex=>`<div style="font-size:13.5px;margin-top:6px;">${escapeHTML(ex.name)} — ${ex.sets.length} sets</div>`).join('')
-      : `<div class="empty-state">No workout logged today. Hit Gym tab to log one.</div>`;
+    if(todaysBlocks.length){
+      let totalEx=0, doneEx=0;
+      const html = todaysBlocks.map(b=>{
+        const blockDone = b.exercises.filter(ex=>ex.sets.some(s=>s.reps||s.weight)).length;
+        totalEx += b.exercises.length; doneEx += blockDone;
+        return `<div style="margin-bottom:10px;">
+          <span class="badge cat-Gym">${escapeHTML(b.group)}</span>
+          <span style="font-size:11px;color:var(--text-faint);margin-left:6px;">${blockDone}/${b.exercises.length} logged</span>
+          ${b.exercises.map(ex=>`<div style="font-size:13.5px;margin-top:6px;">${escapeHTML(ex.name||'Unnamed exercise')} ${ex.sets.some(s=>s.reps||s.weight)?'✓':''}</div>`).join('')}
+        </div>`;
+      }).join('');
+      wc.innerHTML = html;
+      $('#dashWorkoutHint').textContent = `${doneEx}/${totalEx}`;
+    } else {
+      wc.innerHTML = `<div class="empty-state">No routine set for ${dayName}. Set one up in the Gym tab.</div>`;
+      $('#dashWorkoutHint').textContent = '';
+    }
 
-    // dynamic tiles: first 3 nutrients + habits
     const nutrientTiles = state.nutrients.slice(0,3).map(n=>`
       <div class="tile"><div class="tv">${n.current}<span style="font-size:11px;color:var(--text-dim);">${escapeHTML(n.unit)}</span></div><div class="tl">${escapeHTML(n.name)}</div></div>
     `).join('');
@@ -776,7 +801,6 @@ const Forge = (function(){
     qa.innerHTML = chips;
   }
 
-  /* ------------------------- Quote of the Day ------------------------- */
   function pickQuoteIndex(){
     const today = todayKey();
     const override = load(KEYS.quoteOverride, null);
@@ -794,7 +818,6 @@ const Forge = (function(){
     toast('New quote loaded');
   }
 
-  /* ------------------------- RENDER: Tasks (unchanged from v1) ------------------------- */
   let taskFilter = 'All';
   function taskRowHTML(t, showActions=true){
     return `
@@ -841,7 +864,6 @@ const Forge = (function(){
     persist(); closeModal('taskModalBackdrop'); renderAll(); toast('Task saved');
   }
 
-  /* ------------------------- RENDER: Habits (unchanged from v1) ------------------------- */
   function renderHabits(){
     const done = state.habits.filter(h=>h.done).length;
     $('#habitSub').textContent = `${done} of ${state.habits.length} done today`;
@@ -861,7 +883,6 @@ const Forge = (function(){
     state.habits.push({id:uid(), name, done:false}); persist(); closeModal('habitModalBackdrop'); renderAll(); toast('Habit added');
   }
 
-  /* ------------------------- RENDER: Fuel / Nutrients (NEW, replaces fixed nutrition) ------------------------- */
   function quickChipsForUnit(unit){
     const u=(unit||'').trim().toLowerCase();
     if(u==='l') return [0.25,0.5];
@@ -927,18 +948,225 @@ const Forge = (function(){
     addToNutrient(id, v); el.value='';
   }
 
-  /* ------------------------- RENDER: Gym ------------------------- */
-  let gymSubView = 'log';
+  let gymSubView = 'routine';
   function setGymSub(v){
     gymSubView=v;
-    ['log','routine','records'].forEach(s=>{ $('#gymSub-'+s).style.display = s===v?'block':'none'; });
+    $('#gymSub-routine').style.display = v==='routine' ? 'block' : 'none';
+    $('#gymSub-records').style.display = v==='records' ? 'block' : 'none';
     $all('#gymSubNav .pill').forEach(b=>b.classList.toggle('active', b.dataset.sub===v));
     if(v==='routine') renderRoutine();
-    if(v==='records') renderPRs();
+    if(v==='records') renderRecords();
   }
-  function renderGym(){
+
+  const timers = {};
+  function timerKeyOf(exId,setId){ return exId+'-'+setId; }
+  function clearTimerFor(exId,setId){
+    const k=timerKeyOf(exId,setId); const t=timers[k];
+    if(t && t.intervalId) clearInterval(t.intervalId);
+    delete timers[k];
+  }
+  function ensureTimer(exId,setId,defaultTotal){
+    const k=timerKeyOf(exId,setId);
+    if(!timers[k]) timers[k] = {remaining:defaultTotal, total:defaultTotal, running:false, intervalId:null};
+    return timers[k];
+  }
+  function updateTimerDisplay(exId,setId){
+    const t=timers[timerKeyOf(exId,setId)]; if(!t) return;
+    const el=document.getElementById(`timerDisplay-${exId}-${setId}`); if(!el) return;
+    el.textContent = formatMMSS(t.remaining);
+  }
+  function updateToggleBtn(exId,setId){
+    const btn=document.getElementById(`timerToggle-${exId}-${setId}`); if(!btn) return;
+    const t=timers[timerKeyOf(exId,setId)];
+    btn.textContent = (t && t.running) ? '⏸' : '▶';
+  }
+  function playBeep(){
+    try{
+      const ctx = new (window.AudioContext||window.webkitAudioContext)();
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type='sine'; o.frequency.value=880;
+      o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.2, ctx.currentTime);
+      o.start(); o.stop(ctx.currentTime+0.35);
+      setTimeout(()=>ctx.close(), 500);
+    }catch(e){ /* audio blocked or unsupported — vibration still fires */ }
+  }
+  function timerToggle(exId,setId,defaultTotal){
+    const t = ensureTimer(exId,setId,defaultTotal);
+    if(t.running){
+      clearInterval(t.intervalId); t.intervalId=null; t.running=false;
+    } else {
+      t.running=true;
+      t.intervalId = setInterval(()=>{
+        t.remaining--;
+        updateTimerDisplay(exId,setId);
+        if(t.remaining<=0){
+          clearInterval(t.intervalId); t.intervalId=null; t.running=false; t.remaining=0;
+          updateTimerDisplay(exId,setId); updateToggleBtn(exId,setId);
+          playBeep();
+          if(navigator.vibrate) navigator.vibrate([200,100,200]);
+        }
+      }, 1000);
+    }
+    updateToggleBtn(exId,setId);
+  }
+  function timerReset(exId,setId,defaultTotal){
+    const t = ensureTimer(exId,setId,defaultTotal);
+    if(t.intervalId) clearInterval(t.intervalId);
+    t.remaining = t.total; t.running=false; t.intervalId=null;
+    updateTimerDisplay(exId,setId); updateToggleBtn(exId,setId);
+  }
+  function timerSkip(exId,setId){
+    const t = timers[timerKeyOf(exId,setId)]; if(!t) return;
+    if(t.intervalId) clearInterval(t.intervalId);
+    t.remaining = 0; t.running=false; t.intervalId=null;
+    updateTimerDisplay(exId,setId); updateToggleBtn(exId,setId);
+  }
+
+  let routineActiveDay = todayWeekdayName();
+  function setRoutineDay(d){ routineActiveDay=d; renderRoutine(); }
+
+  function renderRoutine(){
+    $('#routineDayNav').innerHTML = DAYS.map(d=>`<button class="pill ${d===routineActiveDay?'active':''}" onclick="Forge.setRoutineDay('${d}')">${d.slice(0,3)}</button>`).join('');
+    const blocks = state.routines[routineActiveDay] || [];
+    $('#routineBlockList').innerHTML = blocks.length ? blocks.map((b,bIdx)=>`
+      <div class="block-card">
+        <div class="flex-between" style="margin-bottom:10px;">
+          <input class="block-group-input" value="${escapeHTML(b.group)}" oninput="Forge.setBlockGroup('${routineActiveDay}',${bIdx},this.value)">
+          <div class="row-actions">
+            <button class="icon-btn sm" onclick="Forge.moveBlock('${routineActiveDay}',${bIdx},-1)">↑</button>
+            <button class="icon-btn sm" onclick="Forge.moveBlock('${routineActiveDay}',${bIdx},1)">↓</button>
+            <button class="icon-btn sm" onclick="Forge.deleteBlock('${routineActiveDay}',${bIdx})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0l1 14h8l1-14"/></svg></button>
+          </div>
+        </div>
+        ${b.exercises.map((ex,exIdx)=>exerciseBlockHTML(routineActiveDay,bIdx,exIdx,ex)).join('')}
+        <button class="btn btn-ghost btn-sm" onclick="Forge.addExerciseToBlock('${routineActiveDay}',${bIdx})">+ Exercise</button>
+      </div>
+    `).join('') : `<div class="empty-state">No routine set for ${routineActiveDay}. Tap + to add a muscle group.</div>`;
+  }
+
+  function exerciseBlockHTML(day,bIdx,exIdx,ex){
+    const presets = [30,60,90,120];
+    return `
+      <div class="exercise-block">
+        <div class="flex-between" style="margin-bottom:6px;">
+          <input class="exercise-name-input" placeholder="Exercise name" value="${escapeHTML(ex.name)}" oninput="Forge.setExerciseName('${day}',${bIdx},${exIdx},this.value)">
+          <button class="icon-btn sm" onclick="Forge.deleteExerciseFromBlock('${day}',${bIdx},${exIdx})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0l1 14h8l1-14"/></svg></button>
+        </div>
+        <input class="exercise-notes-input" placeholder="Notes (optional)" value="${escapeHTML(ex.notes||'')}" oninput="Forge.setExerciseNotes('${day}',${bIdx},${exIdx},this.value)">
+        ${ex.sets.map((s,setIdx)=>{
+          const k = timerKeyOf(ex.id, s.id);
+          const t = timers[k];
+          const display = t ? formatMMSS(t.remaining) : formatMMSS(s.rest||60);
+          const toggleLabel = (t && t.running) ? '⏸' : '▶';
+          const isPreset = presets.includes(s.rest);
+          return `
+          <div class="set-row">
+            <button class="check ${s.done?'checked':''}" style="width:22px;height:22px;border-radius:6px;" onclick="Forge.toggleSetDone('${day}',${bIdx},${exIdx},${setIdx})">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round"><path d="M5 13l4 4L19 7"/></svg>
+            </button>
+            <span class="set-num">${setIdx+1}</span>
+            <input type="number" placeholder="reps" value="${s.reps}" oninput="Forge.setSetVal('${day}',${bIdx},${exIdx},${setIdx},'reps',this.value)">
+            <input type="number" placeholder="kg" value="${s.weight}" oninput="Forge.setSetVal('${day}',${bIdx},${exIdx},${setIdx},'weight',this.value)">
+            <button class="icon-btn sm" onclick="Forge.deleteSet('${day}',${bIdx},${exIdx},${setIdx})">✕</button>
+          </div>
+          <div class="timer-row">
+            <select onchange="Forge.setRestDuration('${day}',${bIdx},${exIdx},${setIdx},this.value)">
+              <option value="30" ${s.rest===30?'selected':''}>30s</option>
+              <option value="60" ${!s.rest||s.rest===60?'selected':''}>60s</option>
+              <option value="90" ${s.rest===90?'selected':''}>90s</option>
+              <option value="120" ${s.rest===120?'selected':''}>120s</option>
+              <option value="custom" ${!isPreset?'selected':''}>Custom</option>
+            </select>
+            <input type="number" id="restCustom-${k}" style="display:${!isPreset?'inline-block':'none'};" placeholder="sec" value="${!isPreset?s.rest:''}" oninput="Forge.setRestDuration('${day}',${bIdx},${exIdx},${setIdx},this.value)">
+            <span class="timer-display mono" id="timerDisplay-${k}">${display}</span>
+            <button class="icon-btn sm" id="timerToggle-${k}" onclick="Forge.timerToggle('${ex.id}','${s.id}',${s.rest||60})">${toggleLabel}</button>
+            <button class="icon-btn sm" onclick="Forge.timerReset('${ex.id}','${s.id}',${s.rest||60})">↺</button>
+            <button class="icon-btn wide" onclick="Forge.timerSkip('${ex.id}','${s.id}')">Skip</button>
+          </div>`;
+        }).join('')}
+        <button class="btn btn-ghost btn-sm" style="margin-top:2px;" onclick="Forge.addSet('${day}',${bIdx},${exIdx})">+ Set</button>
+      </div>`;
+  }
+
+  function addBlockToDay(day){
+    if(!state.routines[day]) state.routines[day]=[];
+    state.routines[day].push({id:uid(), group:'New Group', exercises:[{id:uid(), name:'', notes:'', sets:[{id:uid(), reps:'', weight:'', rest:60, done:false}]}]});
+    persist(); renderRoutine();
+  }
+  function deleteBlock(day,bIdx){
+    const [removed] = state.routines[day].splice(bIdx,1);
+    if(removed) removed.exercises.forEach(ex=>ex.sets.forEach(s=>clearTimerFor(ex.id,s.id)));
+    persist(); renderRoutine();
+  }
+  function moveBlock(day,bIdx,dir){
+    const arr=state.routines[day]; const ni=bIdx+dir;
+    if(ni<0 || ni>=arr.length) return;
+    [arr[bIdx], arr[ni]] = [arr[ni], arr[bIdx]];
+    persist(); renderRoutine();
+  }
+  function setBlockGroup(day,bIdx,val){ state.routines[day][bIdx].group=val; persist(); }
+
+  function addExerciseToBlock(day,bIdx){
+    state.routines[day][bIdx].exercises.push({id:uid(), name:'', notes:'', sets:[{id:uid(), reps:'', weight:'', rest:60, done:false}]});
+    persist(); renderRoutine();
+  }
+  function deleteExerciseFromBlock(day,bIdx,exIdx){
+    const [removed] = state.routines[day][bIdx].exercises.splice(exIdx,1);
+    if(removed) removed.sets.forEach(s=>clearTimerFor(removed.id,s.id));
+    persist(); renderRoutine();
+  }
+  function setExerciseName(day,bIdx,exIdx,val){ state.routines[day][bIdx].exercises[exIdx].name=val; persist(); }
+  function setExerciseNotes(day,bIdx,exIdx,val){ state.routines[day][bIdx].exercises[exIdx].notes=val; persist(); }
+
+  function addSet(day,bIdx,exIdx){
+    state.routines[day][bIdx].exercises[exIdx].sets.push({id:uid(), reps:'', weight:'', rest:60, done:false});
+    persist(); renderRoutine();
+  }
+  function deleteSet(day,bIdx,exIdx,setIdx){
+    const ex = state.routines[day][bIdx].exercises[exIdx];
+    const [removed] = ex.sets.splice(setIdx,1);
+    if(removed) clearTimerFor(ex.id, removed.id);
+    if(!ex.sets.length) ex.sets.push({id:uid(), reps:'', weight:'', rest:60, done:false});
+    persist(); renderRoutine();
+  }
+  function setSetVal(day,bIdx,exIdx,setIdx,field,val){
+    const s = state.routines[day][bIdx].exercises[exIdx].sets[setIdx];
+    s[field] = field==='weight' ? (parseFloat(val)||0) : (parseInt(val,10)||0);
+    persist();
+    renderDashboardWorkoutIfActive();
+  }
+  function toggleSetDone(day,bIdx,exIdx,setIdx){
+    const s = state.routines[day][bIdx].exercises[exIdx].sets[setIdx];
+    s.done = !s.done; persist(); renderRoutine();
+  }
+  function setRestDuration(day,bIdx,exIdx,setIdx,val){
+    const ex = state.routines[day][bIdx].exercises[exIdx];
+    const s = ex.sets[setIdx];
+    const customEl = document.getElementById(`restCustom-${timerKeyOf(ex.id,s.id)}`);
+    if(val==='custom'){ if(customEl) customEl.style.display='inline-block'; return; }
+    const secs = parseInt(val,10)||60;
+    s.rest = secs; persist();
+    const t = ensureTimer(ex.id, s.id, secs);
+    if(!t.running){ t.total=secs; t.remaining=secs; updateTimerDisplay(ex.id,s.id); }
+  }
+  function renderDashboardWorkoutIfActive(){
+    if($('#view-dashboard').classList.contains('active')) renderDashboard();
+  }
+
+  function renderRecords(){
     const bw = state.bodyweight;
     $('#bwLatest').textContent = bw.length ? `latest ${bw[bw.length-1].weight}kg` : '';
+    renderPRs();
+    renderWorkoutHistory();
+  }
+  function logBodyweight(){
+    const v=parseFloat($('#bwInput').value); if(!v){toast('Enter your weight');return;}
+    const today=todayKey(); const existing=state.bodyweight.find(b=>b.date===today);
+    if(existing) existing.weight=v; else state.bodyweight.push({date:today, weight:v});
+    $('#bwInput').value=''; persist(); renderAll(); toast('Body weight logged');
+  }
+  function renderWorkoutHistory(){
     const log = [...state.workouts].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
     $('#gymLog').innerHTML = log.length ? log.map(w=>{
       const prevSessions = state.workouts.filter(x=>x.group===w.group && x.date<w.date).sort((a,b)=>b.date.localeCompare(a.date));
@@ -963,10 +1191,9 @@ const Forge = (function(){
           </div>`;
         }).join('')}
       </div>`;
-    }).join('') : `<div class="empty-state">No sessions logged yet. Tap + to log your first workout.</div>`;
+    }).join('') : `<div class="empty-state">No sessions logged yet. Log sets in the Routine tab — they land here automatically at day's end.</div>`;
   }
 
-  /* -------- Personal Records (manual, separate from logs) -------- */
   function renderPRs(){
     $('#prListFull').innerHTML = state.prs.length ? state.prs.map(p=>`
       <div class="item-row">
@@ -1002,7 +1229,6 @@ const Forge = (function(){
     persist(); closeModal('prModalBackdrop'); renderAll(); toast('Personal record saved');
   }
   function deletePR(id){ state.prs=state.prs.filter(p=>p.id!==id); persist(); renderAll(); }
-  // Manual promotion only — logging a workout NEVER calls this automatically.
   function promoteToPR(workoutId, exIdx){
     const w=state.workouts.find(w=>w.id===workoutId); if(!w) return;
     const ex=w.exercises[exIdx]; if(!ex) return;
@@ -1012,240 +1238,7 @@ const Forge = (function(){
     else{ state.prs.push({id:uid(), name:ex.name, weight:maxW, unit:'kg', date:w.date}); }
     persist(); renderAll(); toast(`${ex.name} PR set to ${maxW}kg`);
   }
-  function logBodyweight(){
-    const v=parseFloat($('#bwInput').value); if(!v){toast('Enter your weight');return;}
-    const today=todayKey(); const existing=state.bodyweight.find(b=>b.date===today);
-    if(existing) existing.weight=v; else state.bodyweight.push({date:today, weight:v});
-    $('#bwInput').value=''; persist(); renderAll(); toast('Body weight logged');
-  }
 
-  /* -------- Routine builder (weekly template, independent of daily logs) -------- */
-  let routineActiveDay = new Date().toLocaleDateString('en-US',{weekday:'long'});
-  let routineExerciseDraft = [''];
-  function renderRoutine(){
-    $('#routineDayNav').innerHTML = DAYS.map(d=>`<button class="pill ${d===routineActiveDay?'active':''}" onclick="Forge.setRoutineDay('${d}')">${d.slice(0,3)}</button>`).join('');
-    const blocks = state.routines[routineActiveDay] || [];
-    $('#routineBlockList').innerHTML = blocks.length ? blocks.map((b,idx)=>`
-      <div class="card">
-        <div class="flex-between">
-          <b>${escapeHTML(b.group)}</b>
-          <div class="row-actions">
-            <button class="icon-btn sm" onclick="Forge.moveRoutineBlock('${routineActiveDay}',${idx},-1)">↑</button>
-            <button class="icon-btn sm" onclick="Forge.moveRoutineBlock('${routineActiveDay}',${idx},1)">↓</button>
-            <button class="icon-btn sm" onclick="Forge.openRoutineModal('${routineActiveDay}',${idx})">✎</button>
-            <button class="icon-btn sm" onclick="Forge.deleteRoutineBlock('${routineActiveDay}',${idx})">🗑</button>
-          </div>
-        </div>
-        <div style="font-size:13px;color:var(--text-dim);margin-top:8px;">${b.exercises.length ? b.exercises.map(escapeHTML).join(' • ') : 'No exercises added yet'}</div>
-      </div>
-    `).join('') : `<div class="empty-state">No routine set for ${routineActiveDay}. Tap + to add a muscle group.</div>`;
-  }
-  function setRoutineDay(d){ routineActiveDay=d; renderRoutine(); }
-  function moveRoutineBlock(day, idx, dir){
-    const arr=state.routines[day]; const ni=idx+dir;
-    if(ni<0 || ni>=arr.length) return;
-    [arr[idx], arr[ni]] = [arr[ni], arr[idx]];
-    persist(); renderRoutine();
-  }
-  function deleteRoutineBlock(day, idx){ state.routines[day].splice(idx,1); persist(); renderRoutine(); }
-  function openRoutineModal(day, editIdx){
-    $('#routineEditDay').value = day;
-    $('#routineEditId').value = (editIdx!==undefined && editIdx!==null) ? editIdx : '';
-    if(editIdx!==undefined && editIdx!==null){
-      const b = state.routines[day][editIdx];
-      $('#routineModalTitle').textContent = 'Edit ' + day + ' block';
-      $('#routineGroupInput').value = b.group;
-      routineExerciseDraft = b.exercises.length ? [...b.exercises] : [''];
-    } else {
-      $('#routineModalTitle').textContent = 'Add ' + day + ' block';
-      $('#routineGroupInput').value = '';
-      routineExerciseDraft = [''];
-    }
-    renderRoutineExerciseInputs();
-    openModal('routineModalBackdrop');
-  }
-  function renderRoutineExerciseInputs(){
-    $('#routineExerciseInputs').innerHTML = routineExerciseDraft.map((name,i)=>`
-      <div class="routine-exercise-row">
-        <input value="${escapeHTML(name)}" oninput="Forge._setRoutineExercise(${i},this.value)" placeholder="Exercise name">
-        <button class="icon-btn sm" onclick="Forge._removeRoutineExercise(${i})">✕</button>
-      </div>`).join('');
-  }
-  function _setRoutineExercise(i,v){ routineExerciseDraft[i]=v; }
-  function _removeRoutineExercise(i){ routineExerciseDraft.splice(i,1); if(!routineExerciseDraft.length) routineExerciseDraft=['']; renderRoutineExerciseInputs(); }
-  function addRoutineExerciseInput(){ routineExerciseDraft.push(''); renderRoutineExerciseInputs(); }
-  function saveRoutineBlock(){
-    const day = $('#routineEditDay').value;
-    const group = $('#routineGroupInput').value.trim();
-    if(!group){ toast('Name the muscle group'); return; }
-    const exercises = routineExerciseDraft.map(s=>s.trim()).filter(Boolean);
-    const editIdxRaw = $('#routineEditId').value;
-    if(!state.routines[day]) state.routines[day]=[];
-    if(editIdxRaw!==''){
-      const idx = parseInt(editIdxRaw,10);
-      state.routines[day][idx] = {id: state.routines[day][idx].id, group, exercises};
-    } else {
-      state.routines[day].push({id:uid(), group, exercises});
-    }
-    persist(); closeModal('routineModalBackdrop'); renderAll(); toast('Routine saved');
-  }
-
-  /* -------- workout modal: dynamic exercise blocks + per-set rest timers -------- */
-  let exerciseDraft = [];
-  const timers = {}; // key `${blockIdx}-${setIdx}` -> {remaining,total,running,intervalId}
-
-  function timerKey(i,j){ return i+'-'+j; }
-  function resetAllTimers(){
-    Object.values(timers).forEach(t=>{ if(t.intervalId) clearInterval(t.intervalId); });
-    Object.keys(timers).forEach(k=>delete timers[k]);
-  }
-  function ensureTimer(i,j){
-    const k=timerKey(i,j);
-    if(!timers[k]){
-      const total = (exerciseDraft[i] && exerciseDraft[i].sets[j] && exerciseDraft[i].sets[j].rest) || 60;
-      timers[k] = {remaining:total, total, running:false, intervalId:null};
-    }
-    return timers[k];
-  }
-  function updateTimerDisplay(i,j){
-    const t=timers[timerKey(i,j)]; if(!t) return;
-    const el=document.getElementById(`timerDisplay-${i}-${j}`); if(!el) return;
-    const m=Math.floor(t.remaining/60), s=t.remaining%60;
-    el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-  }
-  function updateToggleBtn(i,j){
-    const btn=document.getElementById(`timerToggle-${i}-${j}`); if(!btn) return;
-    const t=timers[timerKey(i,j)];
-    btn.textContent = (t && t.running) ? '⏸' : '▶';
-  }
-  function playBeep(){
-    try{
-      const ctx = new (window.AudioContext||window.webkitAudioContext)();
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.type='sine'; o.frequency.value=880;
-      o.connect(g); g.connect(ctx.destination);
-      g.gain.setValueAtTime(0.2, ctx.currentTime);
-      o.start(); o.stop(ctx.currentTime+0.35);
-      setTimeout(()=>ctx.close(), 500);
-    }catch(e){ /* audio blocked or unsupported — silently skip, vibration still fires */ }
-  }
-  function timerToggle(i,j){
-    const t = ensureTimer(i,j);
-    if(t.running){
-      clearInterval(t.intervalId); t.intervalId=null; t.running=false;
-    } else {
-      t.running=true;
-      t.intervalId = setInterval(()=>{
-        t.remaining--;
-        updateTimerDisplay(i,j);
-        if(t.remaining<=0){
-          clearInterval(t.intervalId); t.intervalId=null; t.running=false; t.remaining=0;
-          updateTimerDisplay(i,j); updateToggleBtn(i,j);
-          playBeep();
-          if(navigator.vibrate) navigator.vibrate([200,100,200]);
-        }
-      }, 1000);
-    }
-    updateToggleBtn(i,j);
-  }
-  function timerReset(i,j){
-    const t = ensureTimer(i,j);
-    if(t.intervalId) clearInterval(t.intervalId);
-    t.remaining = t.total; t.running=false; t.intervalId=null;
-    updateTimerDisplay(i,j); updateToggleBtn(i,j);
-  }
-  function _setRestDuration(i,j,val){
-    const custom = document.getElementById(`restCustom-${i}-${j}`);
-    if(val==='custom'){ if(custom) custom.style.display='inline-block'; return; }
-    const secs = parseInt(val,10)||60;
-    if(!exerciseDraft[i] || !exerciseDraft[i].sets[j]) return;
-    exerciseDraft[i].sets[j].rest = secs;
-    const t = ensureTimer(i,j);
-    if(!t.running){ t.total=secs; t.remaining=secs; updateTimerDisplay(i,j); }
-  }
-
-  function openWorkoutModal(){
-    resetAllTimers();
-    exerciseDraft = [{name:'', sets:[{reps:'',weight:'',rest:60}]}];
-    populateLoadRoutineChips();
-    renderExerciseBlocks();
-    openModal('workoutModalBackdrop');
-  }
-  function populateLoadRoutineChips(){
-    const dayName = new Date().toLocaleDateString('en-US',{weekday:'long'});
-    const blocks = state.routines[dayName] || [];
-    const el = $('#loadRoutineChips');
-    el.innerHTML = blocks.length
-      ? `<span style="font-size:11px;color:var(--text-faint);align-self:center;">Load from ${dayName}:</span>` + blocks.map((b,idx)=>`<button class="chip" onclick="Forge.loadRoutineBlock('${dayName}',${idx})">${escapeHTML(b.group)}</button>`).join('')
-      : '';
-  }
-  function ensureGroupOption(name){
-    const sel = $('#workoutGroup');
-    if(![...sel.options].some(o=>o.value===name)){
-      const opt = document.createElement('option'); opt.value=name; opt.textContent=name; sel.appendChild(opt);
-    }
-  }
-  function loadRoutineBlock(day, idx){
-    const block = (state.routines[day]||[])[idx]; if(!block) return;
-    ensureGroupOption(block.group);
-    $('#workoutGroup').value = block.group;
-    resetAllTimers();
-    exerciseDraft = block.exercises.length
-      ? block.exercises.map(name=>({name, sets:[{reps:'',weight:'',rest:60}]}))
-      : [{name:'', sets:[{reps:'',weight:'',rest:60}]}];
-    renderExerciseBlocks();
-    toast('Loaded ' + block.group);
-  }
-  function renderExerciseBlocks(){
-    $('#exerciseBlocks').innerHTML = exerciseDraft.map((ex,i)=>`
-      <div class="exercise-block">
-        <div class="field mb0" style="margin-bottom:8px;">
-          <input placeholder="Exercise name" value="${escapeHTML(ex.name)}" oninput="Forge._setExName(${i}, this.value)">
-        </div>
-        ${ex.sets.map((s,j)=>`
-          <div class="set-row">
-            <span>${j+1}</span>
-            <input type="number" placeholder="reps" value="${s.reps}" oninput="Forge._setSetVal(${i},${j},'reps',this.value)">
-            <input type="number" placeholder="kg" value="${s.weight}" oninput="Forge._setSetVal(${i},${j},'weight',this.value)">
-          </div>
-          <div class="timer-row">
-            <select onchange="Forge._setRestDuration(${i},${j},this.value)">
-              <option value="30">30s</option><option value="60" selected>60s</option><option value="90">90s</option><option value="120">120s</option><option value="custom">Custom</option>
-            </select>
-            <input type="number" id="restCustom-${i}-${j}" style="display:none;" placeholder="sec" oninput="Forge._setRestDuration(${i},${j},this.value)">
-            <span class="timer-display mono" id="timerDisplay-${i}-${j}">01:00</span>
-            <button class="icon-btn sm" id="timerToggle-${i}-${j}" onclick="Forge.timerToggle(${i},${j})">▶</button>
-            <button class="icon-btn sm" onclick="Forge.timerReset(${i},${j})">↺</button>
-          </div>
-        `).join('')}
-        <div style="display:flex;gap:8px;margin-top:8px;">
-          <button class="btn btn-ghost btn-sm" onclick="Forge._addSet(${i})">+ Set</button>
-          <button class="btn btn-danger btn-sm" onclick="Forge._removeExercise(${i})">Remove exercise</button>
-        </div>
-      </div>
-    `).join('');
-  }
-  function addExerciseBlock(){ resetAllTimers(); exerciseDraft.push({name:'', sets:[{reps:'',weight:'',rest:60}]}); renderExerciseBlocks(); }
-  function _setExName(i,v){ exerciseDraft[i].name=v; }
-  function _setSetVal(i,j,field,v){ exerciseDraft[i].sets[j][field] = field==='weight'?(parseFloat(v)||0):(parseInt(v,10)||0); }
-  function _addSet(i){ resetAllTimers(); exerciseDraft[i].sets.push({reps:'',weight:'',rest:60}); renderExerciseBlocks(); }
-  function _removeExercise(i){ resetAllTimers(); exerciseDraft.splice(i,1); renderExerciseBlocks(); }
-  function saveWorkout(){
-    const group = $('#workoutGroup').value;
-    const exercises = exerciseDraft.filter(e=>e.name.trim()).map(e=>({
-      name: e.name.trim(),
-      sets: e.sets.filter(s=>s.reps||s.weight).map(s=>({reps:s.reps||0, weight:s.weight||0}))
-    })).filter(e=>e.sets.length);
-    if(!exercises.length){ toast('Add at least one exercise with a set'); return; }
-    const today = todayKey();
-    const existingIdx = state.workouts.findIndex(w=>w.date===today && w.group===group);
-    const entry = {id:uid(), date:today, group, exercises};
-    if(existingIdx>-1) state.workouts[existingIdx]=entry; else state.workouts.push(entry);
-    resetAllTimers();
-    persist(); closeModal('workoutModalBackdrop'); renderAll(); toast('Workout logged');
-  }
-
-  /* ------------------------- RENDER: Stats ------------------------- */
   function lastNDays(n){
     const days=[]; const d=new Date();
     for(let i=n-1;i>=0;i--){ const dd=new Date(d); dd.setDate(d.getDate()-i); days.push(todayKey(dd)); }
@@ -1307,14 +1300,9 @@ const Forge = (function(){
     `;
   }
 
-  /* ------------------------- modal helpers ------------------------- */
   function openModal(id){ $('#'+id).classList.add('open'); }
-  function closeModal(id){
-    $('#'+id).classList.remove('open');
-    if(id==='workoutModalBackdrop') resetAllTimers();
-  }
+  function closeModal(id){ $('#'+id).classList.remove('open'); }
 
-  /* ------------------------- nav / view switching ------------------------- */
   function switchView(name){
     $all('.view').forEach(v=>v.classList.remove('active'));
     $('#view-'+name).classList.add('active');
@@ -1326,13 +1314,11 @@ const Forge = (function(){
     renderTasks();
     renderHabits();
     renderNutrition();
-    renderGym();
     if(gymSubView==='routine') renderRoutine();
-    if(gymSubView==='records') renderPRs();
+    if(gymSubView==='records') renderRecords();
     renderStats();
   }
 
-  /* ------------------------- init ------------------------- */
   function init(){
     loadAll();
     runMigrations();
@@ -1347,9 +1333,8 @@ const Forge = (function(){
     $('#fabBtn').addEventListener('click', ()=>{
       const active = $('.view.active').id;
       if(active==='view-gym'){
-        if(gymSubView==='routine') openRoutineModal(routineActiveDay);
-        else if(gymSubView==='records') openPRModalNew();
-        else openWorkoutModal();
+        if(gymSubView==='records'){ openPRModalNew(); }
+        else{ addBlockToDay(routineActiveDay); }
       }
       else if(active==='view-habits'){ openHabitModal(); }
       else if(active==='view-nutrition'){ openNutrientModalNew(); }
@@ -1358,11 +1343,10 @@ const Forge = (function(){
 
     $all('#taskCatSeg button').forEach(b=>b.addEventListener('click', ()=>setSeg('#taskCatSeg', b.dataset.v)));
     $all('#taskPriSeg button').forEach(b=>b.addEventListener('click', ()=>setSeg('#taskPriSeg', b.dataset.v)));
-    $all('.modal-backdrop').forEach(m=>m.addEventListener('click', e=>{ if(e.target===m){ m.classList.remove('open'); if(m.id==='workoutModalBackdrop') resetAllTimers(); } }));
+    $all('.modal-backdrop').forEach(m=>m.addEventListener('click', e=>{ if(e.target===m) m.classList.remove('open'); }));
 
     renderAll();
 
-    // best-effort service worker registration — only meaningful when served over http(s), e.g. GitHub Pages.
     if('serviceWorker' in navigator && location.protocol !== 'file:'){
       navigator.serviceWorker.register('./sw.js').catch(()=>{ /* sw.js optional */ });
     }
@@ -1375,18 +1359,16 @@ const Forge = (function(){
 
   document.addEventListener('DOMContentLoaded', init);
 
-  /* ------------------------- public API ------------------------- */
   return {
     switchView, toggleTask, deleteTask, editTask, saveTask, setTaskFilter,
     toggleHabit, deleteHabit, openHabitModal, saveHabit,
     openNutrientModalNew, editNutrient, saveNutrient, deleteNutrient, addToNutrient, addCustomToNutrient,
     logBodyweight, promoteToPR,
     setGymSub,
-    openWorkoutModal, addExerciseBlock, saveWorkout, loadRoutineBlock,
-    _setExName, _setSetVal, _addSet, _removeExercise, _setRestDuration,
-    timerToggle, timerReset,
-    setRoutineDay, openRoutineModal, saveRoutineBlock, moveRoutineBlock, deleteRoutineBlock,
-    addRoutineExerciseInput, _setRoutineExercise, _removeRoutineExercise,
+    setRoutineDay, addBlockToDay, deleteBlock, moveBlock, setBlockGroup,
+    addExerciseToBlock, deleteExerciseFromBlock, setExerciseName, setExerciseNotes,
+    addSet, deleteSet, setSetVal, toggleSetDone, setRestDuration,
+    timerToggle, timerReset, timerSkip,
     openPRModalNew, editPR, savePR, deletePR,
     refreshQuote,
     closeModal,
