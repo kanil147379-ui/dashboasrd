@@ -1,7 +1,7 @@
 // Forge — minimal offline cache.
 // Only ever registered when served over http(s) (see index.html). Not needed
 // and not loaded when you just open index.html directly in a browser.
-const CACHE = 'forge-v2';
+const CACHE = 'forge-v3';
 const ASSETS = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', (e) => {
