@@ -205,39 +205,6 @@ input,select,textarea{font-family:inherit;}
 .flex-between{display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .mt8{margin-top:8px;}
 .mb0{margin-bottom:0;}
-
-.topbar-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
-.back-row{margin-bottom:6px;}
-.back-btn{background:none;border:none;color:var(--text-dim);font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:4px;padding:4px 0;}
-.settings-section{margin-bottom:18px;}
-.weight-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
-.weight-row span{flex:1;font-size:13px;}
-.weight-row input{width:64px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:13.5px;}
-.weight-sum{font-size:12px;margin-top:2px;font-weight:600;}
-.weight-sum.bad{color:var(--red);}
-.weight-sum.good{color:var(--green);}
-.compare-table{width:100%;border-collapse:collapse;font-size:12.5px;}
-.compare-table th{text-align:left;color:var(--text-dim);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.03em;padding-bottom:6px;}
-.compare-table td{padding:7px 4px;border-top:1px solid var(--border);}
-.compare-table td.num{font-family:var(--font-mono);text-align:right;white-space:nowrap;}
-.change-up{color:var(--green);}
-.change-down{color:var(--red);}
-.change-flat{color:var(--text-faint);}
-.callout{background:var(--bg-elev);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-top:8px;font-size:12.5px;}
-.callout b{color:var(--text);}
-.expense-row{display:flex;align-items:center;justify-content:space-between;padding:10px 4px;border-bottom:1px solid var(--border);gap:8px;}
-.expense-row:last-child{border-bottom:none;}
-.expense-meta{font-size:11px;color:var(--text-faint);margin-top:2px;}
-.more-card{display:flex;align-items:center;justify-content:space-between;padding:16px;cursor:pointer;}
-.more-card .mc-title{font-weight:700;font-size:14.5px;}
-.more-card .mc-sub{font-size:12px;color:var(--text-dim);margin-top:2px;}
-.review-status-badge{font-size:10px;padding:2px 8px;border-radius:99px;font-weight:700;flex-shrink:0;}
-.review-status-badge.done{background:rgba(111,207,122,.15);color:var(--green);}
-.review-status-badge.pending{background:rgba(139,149,161,.18);color:var(--text-dim);}
-textarea.review-input{width:100%;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 12px;color:var(--text);font-size:14px;min-height:60px;resize:vertical;font-family:inherit;}
-body.theme-light{--bg:#F2F4F6;--bg-elev:#FFFFFF;--card:#FFFFFF;--card-hi:#EEF1F4;--border:#DDE2E7;--text:#0F1417;--text-dim:#586270;--text-faint:#8B95A1;}
-body.theme-light .tabbar{background:rgba(255,255,255,.92);}
-body.theme-light #toast{box-shadow:0 6px 20px rgba(0,0,0,.12);}
 @media(min-width:600px){
   .view{max-width:560px;margin:0 auto;}
   .topbar{max-width:560px;margin:0 auto;}
@@ -249,16 +216,9 @@ body.theme-light #toast{box-shadow:0 6px 20px rgba(0,0,0,.12);}
 <body>
 
 <div class="topbar">
-  <div class="topbar-row">
-    <div>
-      <div class="eyebrow" id="eyebrowDate">—</div>
-      <h1>Forge</h1>
-      <div class="date" id="subDate">Loading…</div>
-    </div>
-    <button class="icon-btn" id="settingsBtn" onclick="Forge.switchView('settings')" title="Settings" style="margin-top:2px;">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09A1.65 1.65 0 0015 4.6a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9c.09.35.14.72.14 1.09s-.05.74-.14 1.09"/></svg>
-    </button>
-  </div>
+  <div class="eyebrow" id="eyebrowDate">—</div>
+  <h1>Forge</h1>
+  <div class="date" id="subDate">Loading…</div>
 </div>
 
 <!-- ============ DASHBOARD ============ -->
@@ -305,16 +265,6 @@ body.theme-light #toast{box-shadow:0 6px 20px rgba(0,0,0,.12);}
   <div class="card">
     <div class="card-title">Daily Score <span class="hint" id="scoreTotalHint"></span></div>
     <div id="scoreBreakdown"></div>
-  </div>
-
-  <div class="card more-card" onclick="Forge.switchView('review')">
-    <div><div class="mc-title">Daily Review</div><div class="mc-sub" id="dashReviewSub">—</div></div>
-    <span style="color:var(--text-faint);">›</span>
-  </div>
-
-  <div class="card more-card" onclick="Forge.switchView('expenses')">
-    <div><div class="mc-title">Spending</div><div class="mc-sub" id="dashExpenseSub">—</div></div>
-    <span style="color:var(--text-faint);">›</span>
   </div>
 
   <div class="card">
@@ -401,120 +351,6 @@ body.theme-light #toast{box-shadow:0 6px 20px rgba(0,0,0,.12);}
   <div class="card"><div class="card-title">Workout consistency</div><div id="workoutConsistency"></div></div>
   <div class="card"><div class="card-title">Habit streaks</div><div id="habitStreaks"></div></div>
   <div class="card"><div class="card-title">Monthly summary</div><div class="tile-grid" id="monthlyTiles"></div></div>
-  <div class="card">
-    <div class="card-title">Weekly Comparison <span class="hint" id="weekCompRangeHint"></span></div>
-    <div id="weeklyComparisonBody"></div>
-  </div>
-</section>
-
-<!-- ============ MORE ============ -->
-<section class="view" id="view-more">
-  <div class="section-head"><div><h2>More</h2><div class="section-sub">Review, spending & settings</div></div></div>
-  <div class="card more-card" onclick="Forge.switchView('review')">
-    <div><div class="mc-title">Daily Review</div><div class="mc-sub" id="moreReviewSub">—</div></div>
-    <span style="color:var(--text-faint);">›</span>
-  </div>
-  <div class="card more-card" onclick="Forge.switchView('expenses')">
-    <div><div class="mc-title">Expenses</div><div class="mc-sub" id="moreExpenseSub">—</div></div>
-    <span style="color:var(--text-faint);">›</span>
-  </div>
-  <div class="card more-card" onclick="Forge.switchView('settings')">
-    <div><div class="mc-title">Settings</div><div class="mc-sub">Score weights, data, preferences</div></div>
-    <span style="color:var(--text-faint);">›</span>
-  </div>
-  <div class="section-sub" style="margin-top:6px;">Weekly comparison lives inside Stats.</div>
-</section>
-
-<!-- ============ DAILY REVIEW ============ -->
-<section class="view" id="view-review">
-  <div class="back-row"><button class="back-btn" onclick="Forge.switchView('more')">← Back</button></div>
-  <div class="section-head"><div><h2>Daily Review</h2><div class="section-sub">Reflect and track how each day went</div></div></div>
-
-  <div class="card">
-    <div class="field mb0"><label>Reviewing</label><input type="date" id="reviewDateInput" onchange="Forge.setReviewDate(this.value)"></div>
-  </div>
-
-  <div class="card" id="reviewSummaryCard"></div>
-
-  <div class="card">
-    <div class="card-title">Reflection <span class="hint" id="reviewStatusHint"></span></div>
-    <div class="field"><label>What went well?</label><textarea class="review-input" id="reviewWentWell"></textarea></div>
-    <div class="field"><label>What went wrong?</label><textarea class="review-input" id="reviewWentWrong"></textarea></div>
-    <div class="field"><label>What did I learn?</label><textarea class="review-input" id="reviewLearned"></textarea></div>
-    <div class="field"><label>#1 priority for tomorrow</label><textarea class="review-input" id="reviewPriority" style="min-height:44px;"></textarea></div>
-    <button class="btn btn-primary" onclick="Forge.completeReview()">Complete Review</button>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Previous reviews</div>
-    <div id="reviewHistoryList"></div>
-  </div>
-</section>
-
-<!-- ============ EXPENSES ============ -->
-<section class="view" id="view-expenses">
-  <div class="back-row"><button class="back-btn" onclick="Forge.switchView('more')">← Back</button></div>
-  <div class="section-head"><div><h2>Expenses</h2><div class="section-sub">Offline expense tracker</div></div></div>
-
-  <div class="card">
-    <div class="card-title">Spending</div>
-    <div class="tile-grid" id="expenseSummaryTiles"></div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Monthly budget <span class="hint" id="expenseBudgetHint"></span></div>
-    <div class="pbar-track"><div class="pbar-fill" id="expenseBudgetBar" style="background:var(--teal);width:0%;"></div></div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">By category</div>
-    <div id="expenseCategoryBreakdown"></div>
-  </div>
-
-  <div class="card"><div class="card-title">All expenses</div><div id="expenseListFull"></div></div>
-</section>
-
-<!-- ============ SETTINGS ============ -->
-<section class="view" id="view-settings">
-  <div class="back-row"><button class="back-btn" onclick="Forge.switchView('more')">← Back</button></div>
-  <div class="section-head"><div><h2>Settings</h2><div class="section-sub">Forge preferences & data</div></div></div>
-
-  <div class="card">
-    <div class="card-title">General</div>
-    <div class="field"><label>Your name</label><input id="setName" placeholder="e.g. Arjun"></div>
-    <div class="field-row">
-      <div class="field"><label>Currency symbol</label><input id="setCurrency" placeholder="₹"></div>
-      <div class="field"><label>Week starts on</label>
-        <select id="setWeekStart"><option value="Monday">Monday</option><option value="Sunday">Sunday</option></select>
-      </div>
-    </div>
-    <div class="field"><label>Theme</label>
-      <div class="seg" id="setThemeSeg"><button data-v="dark" class="active">Dark</button><button data-v="light">Light</button></div>
-    </div>
-    <button class="btn btn-primary" onclick="Forge.saveGeneralSettings()">Save general settings</button>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Daily Score weights <span class="hint">must total 100</span></div>
-    <div id="scoreWeightInputs"></div>
-    <div class="weight-sum" id="weightSumHint"></div>
-    <button class="btn btn-primary mt8" onclick="Forge.saveScoreWeights()">Save weights</button>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Expense settings</div>
-    <div class="field"><label>Monthly budget</label><input type="number" id="setBudget" step="1"></div>
-    <div class="field"><label>Categories (comma separated)</label><input id="setCategories"></div>
-    <button class="btn btn-primary" onclick="Forge.saveExpenseSettings()">Save expense settings</button>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Data management</div>
-    <button class="btn btn-ghost mt8" onclick="Forge.exportData()">Export Forge data</button>
-    <input type="file" id="importFileInput" accept="application/json" style="display:none;" onchange="Forge.importData(this.files[0])">
-    <button class="btn btn-ghost mt8" onclick="document.getElementById('importFileInput').click()">Import Forge data</button>
-    <button class="btn btn-danger mt8" onclick="Forge.resetData()">Reset Forge data</button>
-  </div>
 </section>
 
 <!-- ============ TAB BAR ============ -->
@@ -526,7 +362,6 @@ body.theme-light #toast{box-shadow:0 6px 20px rgba(0,0,0,.12);}
   <button class="tabbtn" data-view="nutrition"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6M8 4c0 3-2 3-2 6a6 6 0 0012 0c0-3-2-3-2-6"/><path d="M6 14a6 6 0 0012 0v7H6z"/></svg><span>Fuel</span></button>
   <button class="tabbtn" data-view="habits"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/></svg><span>Habits</span></button>
   <button class="tabbtn" data-view="stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg><span>Stats</span></button>
-  <button class="tabbtn" data-view="more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>More</span></button>
 </nav>
 
 <button class="fab" id="fabBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg></button>
@@ -618,23 +453,6 @@ body.theme-light #toast{box-shadow:0 6px 20px rgba(0,0,0,.12);}
   </div>
 </div>
 
-<div class="modal-backdrop" id="expenseModalBackdrop">
-  <div class="modal">
-    <h3 id="expenseModalTitle">Add expense</h3>
-    <input type="hidden" id="expenseEditId">
-    <div class="field-row">
-      <div class="field"><label>Amount</label><input type="number" id="expenseAmount" step="0.01"></div>
-      <div class="field"><label>Date</label><input type="date" id="expenseDate"></div>
-    </div>
-    <div class="field"><label>Category</label><select id="expenseCategory"></select></div>
-    <div class="field"><label>Description</label><input id="expenseDesc" placeholder="e.g. Lunch with friends"></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="Forge.closeModal('expenseModalBackdrop')">Cancel</button>
-      <button class="btn btn-primary" onclick="Forge.saveExpense()">Save</button>
-    </div>
-  </div>
-</div>
-
 <div id="toast"></div>
 
 <script>
@@ -680,8 +498,7 @@ const Forge = (function(){
     workouts:'forge_workoutsLog', bodyweight:'forge_bodyweight',
     history:'forge_history', streak:'forge_streak', lastActive:'forge_lastActive',
     quoteOverride:'forge_quoteOverride', datedTasks:'forge_datedTasks',
-    legacyNutrition:'forge_nutrition', legacyTargets:'forge_targets',
-    reviews:'forge_daily_reviews', expenses:'forge_expenses', settings:'forge_settings'
+    legacyNutrition:'forge_nutrition', legacyTargets:'forge_targets'
   };
   function load(key, fallback){
     try{ const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }
@@ -704,11 +521,6 @@ const Forge = (function(){
     {id:uid(), name:'Meditation', done:false}, {id:uid(), name:'Sleep before 11 PM', done:false},
   ];
   const DEFAULT_PR_NAMES = ['Bench Press','Squat','Deadlift','Shoulder Press','Barbell Row'];
-  const DEFAULT_EXPENSE_CATEGORIES = ['Food','Transport','Education','Gym','Entertainment','Shopping','Bills','Other'];
-  const DEFAULT_SETTINGS = {
-    userName:'', currency:'₹', weekStart:'Monday', theme:'dark',
-    scoreWeights:{}, monthlyBudget:0, expenseCategories: DEFAULT_EXPENSE_CATEGORIES.slice()
-  };
 
   const QUOTES = [
     ["Discipline is choosing between what you want now and what you want most.","Anon"],
@@ -829,8 +641,7 @@ const Forge = (function(){
   /* ------------------------- in-memory state ------------------------- */
   let state = {
     tasks:[], habits:[], nutrients:null, prs:null, routines:null,
-    workouts:[], bodyweight:[], history:{}, streak:{count:0,lastDate:null}, datedTasks:[],
-    settings:null, reviews:{}, expenses:[]
+    workouts:[], bodyweight:[], history:{}, streak:{count:0,lastDate:null}, datedTasks:[]
   };
 
   function loadAll(){
@@ -844,9 +655,6 @@ const Forge = (function(){
     state.history = load(KEYS.history, {});
     state.streak = load(KEYS.streak, {count:0,lastDate:null});
     state.datedTasks = load(KEYS.datedTasks, []);
-    state.settings = load(KEYS.settings, null);
-    state.reviews = load(KEYS.reviews, {});
-    state.expenses = load(KEYS.expenses, []);
   }
 
   function runMigrations(){
@@ -894,18 +702,6 @@ const Forge = (function(){
         });
       });
     });
-    if(state.settings === null){
-      state.settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS)); changed = true;
-    } else {
-      const s = state.settings;
-      if(s.userName===undefined){ s.userName=''; changed=true; }
-      if(s.currency===undefined){ s.currency='₹'; changed=true; }
-      if(s.weekStart===undefined){ s.weekStart='Monday'; changed=true; }
-      if(s.theme===undefined){ s.theme='dark'; changed=true; }
-      if(!s.scoreWeights || typeof s.scoreWeights!=='object'){ s.scoreWeights={}; changed=true; }
-      if(s.monthlyBudget===undefined){ s.monthlyBudget=0; changed=true; }
-      if(!Array.isArray(s.expenseCategories) || !s.expenseCategories.length){ s.expenseCategories=DEFAULT_EXPENSE_CATEGORIES.slice(); changed=true; }
-    }
     if(changed) persist();
   }
 
@@ -920,12 +716,12 @@ const Forge = (function(){
     save(KEYS.history, state.history);
     save(KEYS.streak, state.streak);
     save(KEYS.datedTasks, state.datedTasks);
-    save(KEYS.settings, state.settings);
-    save(KEYS.reviews, state.reviews);
-    save(KEYS.expenses, state.expenses);
   }
 
-  function computeWorkoutPctForDate(dateKey){
+  // Returns both the percentage AND whether this category is measurable at all
+  // today. No routine scheduled + no legacy log = nothing to measure, not a
+  // failure — same principle applied to every category in computeCategoryPcts.
+  function computeWorkoutStats(dateKey){
     const dayName = weekdayNameFromKey(dateKey);
     const blocks = state.routines[dayName] || [];
     let total=0, done=0;
@@ -934,16 +730,18 @@ const Forge = (function(){
       if(ex.sets.some(s=>s.reps || s.weight)) done++;
     }));
     if(total===0){
-      return state.workouts.some(w=>w.date===dateKey) ? 100 : 0;
+      const hasLegacyLog = state.workouts.some(w=>w.date===dateKey);
+      return {pctVal: hasLegacyLog ? 100 : 0, applicable: hasLegacyLog};
     }
-    return pct(done, total);
+    return {pctVal: pct(done, total), applicable:true};
   }
+  function computeWorkoutPctForDate(dateKey){ return computeWorkoutStats(dateKey).pctVal; }
 
   // Weights for the Daily Score breakdown card — sum to 100, tweak freely.
   // These are the SAME weights used to compute `overall` below, so the score
   // card's total and the dashboard ring's center number always agree — one
   // canonical score, shown two ways (compact ring + transparent breakdown).
-  const BASE_SCORE_WEIGHTS = [
+  const SCORE_WEIGHTS = [
     {key:'taskPct',           label:'Daily Tasks',      weight:25},
     {key:'dueTodayPct',       label:'Deadlines Today',  weight:20},
     {key:'overdueControlPct', label:'Overdue Control',  weight:15},
@@ -951,15 +749,6 @@ const Forge = (function(){
     {key:'nutritionPct',      label:'Nutrition',        weight:15},
     {key:'habitPct',          label:'Habits',           weight:10},
   ];
-  // User-editable overrides live in state.settings.scoreWeights (Settings page).
-  // currentWeights() is the single source every score computation reads from,
-  // so the ring, the breakdown card, and Settings' own preview all agree.
-  function currentWeights(){
-    return BASE_SCORE_WEIGHTS.map(w=>{
-      const override = state.settings && state.settings.scoreWeights ? state.settings.scoreWeights[w.key] : undefined;
-      return {key:w.key, label:w.label, weight: typeof override==='number' ? override : w.weight};
-    });
-  }
 
   function computeCategoryPcts(dateKeyOverride){
     const dk = dateKeyOverride || todayKey();
@@ -967,43 +756,56 @@ const Forge = (function(){
     const habitPct = pct(state.habits.filter(h=>h.done).length, state.habits.length);
     const nutrientPcts = state.nutrients.map(n=>pct(n.current, n.target));
     const nutritionPct = nutrientPcts.length ? Math.round(nutrientPcts.reduce((a,b)=>a+b,0)/nutrientPcts.length) : 0;
-    const workoutPct = computeWorkoutPctForDate(dk);
+    const workoutStats = computeWorkoutStats(dk);
+    const workoutPct = workoutStats.pctVal;
 
-    // Deadline tasks due ON this date — "nothing due today" scores as neutral
-    // (100), not a failure, via pctOrFull.
+    // "Nothing due today" still scores as neutral (100) via pctOrFull — but
+    // only once we've confirmed below that this category actually applies.
     const dueToday = state.datedTasks.filter(t=>t.dueDate===dk);
     const dueTodayPct = pctOrFull(dueToday.filter(t=>t.done).length, dueToday.length);
 
-    // Overdue control: tasks still unfinished from BEFORE this date. Each one
-    // costs 20 points, floored at 0 — tune OVERDUE_PENALTY_PER_TASK to taste.
     const OVERDUE_PENALTY_PER_TASK = 20;
     const overdueCount = state.datedTasks.filter(t=>!t.done && t.dueDate && t.dueDate<dk).length;
     const overdueControlPct = clamp(100 - overdueCount*OVERDUE_PENALTY_PER_TASK, 0, 100);
 
+    // THE FIX: a category only contributes to Today Score if it's actually
+    // measurable for this user/day. An empty or never-used category is
+    // excluded from the weighted average (its weight is NOT redistributed
+    // as extra credit elsewhere — activeWeight simply shrinks, and the
+    // remaining categories are weighed proportionally among themselves).
+    // This is what makes "nothing done, nothing set up" == a true 0, and
+    // "nothing done, but Planner/Gym ARE in active use" == a true low score
+    // reflecting real inaction, not a fabricated floor either way.
+    const applicability = {
+      taskPct: state.tasks.length>0,
+      dueTodayPct: dueToday.length>0,
+      overdueControlPct: state.datedTasks.length>0,
+      workoutPct: workoutStats.applicable,
+      nutritionPct: state.nutrients.length>0,
+      habitPct: state.habits.length>0,
+    };
     const parts = {taskPct, dueTodayPct, overdueControlPct, workoutPct, nutritionPct, habitPct};
-    let weightedSum = 0;
-    currentWeights().forEach(w=>{ weightedSum += parts[w.key] * w.weight; });
-    const overall = Math.round(weightedSum / 100);
+    let weightedSum = 0, activeWeight = 0;
+    SCORE_WEIGHTS.forEach(w=>{
+      if(applicability[w.key]){ weightedSum += parts[w.key] * w.weight; activeWeight += w.weight; }
+    });
+    const overall = activeWeight>0 ? Math.round(weightedSum/activeWeight) : 0;
 
-    return {taskPct, habitPct, nutritionPct, workoutPct, dueTodayPct, overdueControlPct, overdueCount, overall};
+    return {taskPct, habitPct, nutritionPct, workoutPct, dueTodayPct, overdueControlPct, overdueCount, overall, applicability};
   }
 
   function runRollover(){
     const today = todayKey();
     const last = load(KEYS.lastActive, null);
-    if(last === today) return;
+    if(last === today) return false; // idempotent: already up to date, no-op
 
     if(last){
       const p = computeCategoryPcts(last);
-      const dueTodayLast = state.datedTasks.filter(t=>t.dueDate===last);
       state.history[last] = {
         taskPct:p.taskPct, habitPct:p.habitPct, nutritionPct:p.nutritionPct,
         dueTodayPct:p.dueTodayPct, overdueControlPct:p.overdueControlPct, overdueCount:p.overdueCount,
         workoutDone:p.workoutPct===100, overallPct:p.overall,
-        bodyweight: state.bodyweight.length ? state.bodyweight[state.bodyweight.length-1].weight : null,
-        taskDone: state.tasks.filter(t=>t.done).length, taskTotal: state.tasks.length,
-        habitDone: state.habits.filter(h=>h.done).length, habitTotal: state.habits.length,
-        dueTodayDone: dueTodayLast.filter(t=>t.done).length, dueTodayTotal: dueTodayLast.length
+        bodyweight: state.bodyweight.length ? state.bodyweight[state.bodyweight.length-1].weight : null
       };
       state.streak.count = p.overall >= 80 ? state.streak.count + 1 : 0;
       state.streak.lastDate = last;
@@ -1032,14 +834,28 @@ const Forge = (function(){
 
     save(KEYS.lastActive, today);
     persist();
+    return true;
+  }
+
+  // Called on startup and whenever the app might have sat open across a
+  // midnight boundary (tab regains focus/visibility). Only re-renders if a
+  // rollover actually happened — otherwise this is a cheap no-op, safe to
+  // call as often as the browser fires these events.
+  function checkDailyRollover(){
+    if(runRollover()) renderAll();
   }
 
   function renderRing(){
     const p = computeCategoryPcts();
     // Compact glance view: fold recurring-task completion, today's deadlines,
     // and overdue control into one "Tasks" arc so the ring stays 4 segments.
-    // The full itemized weighting lives in the Daily Score card below.
-    const tasksArcVal = Math.round((p.taskPct + p.dueTodayPct + p.overdueControlPct) / 3);
+    // Same applicability rule as the score: an unused sub-category doesn't
+    // get averaged in as fabricated credit.
+    const taskParts = [];
+    if(p.applicability.taskPct) taskParts.push(p.taskPct);
+    if(p.applicability.dueTodayPct) taskParts.push(p.dueTodayPct);
+    if(p.applicability.overdueControlPct) taskParts.push(p.overdueControlPct);
+    const tasksArcVal = taskParts.length ? Math.round(taskParts.reduce((a,b)=>a+b,0)/taskParts.length) : 0;
     const rings = [
       {pct:tasksArcVal, color:'#3ED8C3', label:'Tasks'},
       {pct:p.workoutPct, color:'#F5A742', label:'Workout'},
@@ -1187,7 +1003,11 @@ const Forge = (function(){
   function renderDailyScore(){
     const p = computeCategoryPcts();
     let html = '';
-    currentWeights().forEach(w=>{
+    SCORE_WEIGHTS.forEach(w=>{
+      if(!p.applicability[w.key]){
+        html += `<div class="stat-row"><span style="color:var(--text-faint);">${w.label}</span><b style="color:var(--text-faint);">not used yet</b></div>`;
+        return;
+      }
       const value = p[w.key];
       const earned = Math.round(value/100 * w.weight);
       html += `
@@ -1425,9 +1245,8 @@ const Forge = (function(){
   function getWeekDates(offset){
     const now = new Date();
     const dow = now.getDay(); // 0=Sun..6=Sat
-    const startsMonday = !state.settings || state.settings.weekStart !== 'Sunday';
-    const diffToStart = startsMonday ? (dow===0 ? -6 : 1-dow) : -dow;
-    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate()+diffToStart+offset*7);
+    const diffToMonday = (dow===0 ? -6 : 1-dow);
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate()+diffToMonday+offset*7);
     const dates=[];
     for(let i=0;i<7;i++){ const d=new Date(monday.getFullYear(),monday.getMonth(),monday.getDate()+i); dates.push(todayKey(d)); }
     return dates;
@@ -1827,409 +1646,15 @@ const Forge = (function(){
       <div class="tile"><div class="tv">${state.bodyweight.length}</div><div class="tl">Weigh-ins</div></div>
       <div class="tile"><div class="tv" style="color:${p.overdueCount?'var(--red)':'inherit'};">${p.overdueCount}</div><div class="tl">Overdue now</div></div>
     `;
-    renderWeeklyComparison();
-  }
-
-  /* ------------------------- date/range helpers shared by Review, Weekly Comparison & Expenses ------------------------- */
-  function monthStartKey(d=new Date()){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; }
-  function weekStartKeyFor(d=new Date()){
-    const dow = d.getDay();
-    const startsMonday = !state.settings || state.settings.weekStart !== 'Sunday';
-    const diff = startsMonday ? (dow===0 ? -6 : 1-dow) : -dow;
-    const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate()+diff);
-    return todayKey(monday);
-  }
-  function expensesInRange(fromKey, toKey){
-    return state.expenses.filter(e=>e.date>=fromKey && e.date<=toKey);
-  }
-  function updateMoreSubs(){
-    const rec = state.reviews[todayKey()];
-    const reviewText = rec && rec.completed ? 'Today reviewed ✓' : 'Today not reviewed yet';
-    const reviewSub = $('#moreReviewSub'); if(reviewSub) reviewSub.textContent = reviewText;
-    const dashReviewSub = $('#dashReviewSub'); if(dashReviewSub) dashReviewSub.textContent = reviewText;
-
-    const cur = state.settings.currency;
-    const spentMonth = expensesInRange(monthStartKey(), todayKey()).reduce((s,e)=>s+e.amount,0);
-    const budget = state.settings.monthlyBudget || 0;
-    const spendText = budget>0
-      ? `${cur}${round1(spentMonth)} of ${cur}${round1(budget)} this month`
-      : `${cur}${round1(spentMonth)} spent this month`;
-    const expenseSub = $('#moreExpenseSub'); if(expenseSub) expenseSub.textContent = spendText;
-    const dashExpenseSub = $('#dashExpenseSub'); if(dashExpenseSub) dashExpenseSub.textContent = spendText;
-  }
-
-  /* ------------------------- DAILY REVIEW ------------------------- */
-  // Pulls a read-only summary from the SAME data the rest of Forge already
-  // computes (computeCategoryPcts for today, the forge_history snapshot for
-  // past days) — no duplicate scoring or task system, per spec.
-  let reviewSelectedDate = todayKey();
-  function setReviewDate(dateKey){ reviewSelectedDate = dateKey || todayKey(); renderReview(); }
-  function computeDaySummary(dateKey){
-    const today = todayKey();
-    if(dateKey === today){
-      const p = computeCategoryPcts();
-      const dueTodayItems = state.datedTasks.filter(t=>t.dueDate===today);
-      return {
-        hasData:true,
-        score:p.overall,
-        taskDone: state.tasks.filter(t=>t.done).length, taskTotal: state.tasks.length,
-        habitDone: state.habits.filter(h=>h.done).length, habitTotal: state.habits.length,
-        dueTodayDone: dueTodayItems.filter(t=>t.done).length, dueTodayTotal: dueTodayItems.length,
-        missedDueToday: dueTodayItems.filter(t=>!t.done).map(t=>t.text),
-        overdueCount: p.overdueCount,
-        workoutDone: p.workoutPct===100,
-        nutritionPct: p.nutritionPct
-      };
-    }
-    const h = state.history[dateKey];
-    if(!h) return {hasData:false};
-    return {
-      hasData:true,
-      score:h.overallPct, taskDone:h.taskDone, taskTotal:h.taskTotal,
-      habitDone:h.habitDone, habitTotal:h.habitTotal,
-      dueTodayDone:h.dueTodayDone, dueTodayTotal:h.dueTodayTotal,
-      missedDueToday:[], overdueCount:h.overdueCount, workoutDone:h.workoutDone,
-      nutritionPct:h.nutritionPct
-    };
-  }
-  function renderReview(){
-    const dateEl = $('#reviewDateInput'); if(!dateEl) return;
-    dateEl.value = reviewSelectedDate;
-    const summary = computeDaySummary(reviewSelectedDate);
-    const rec = state.reviews[reviewSelectedDate] || null;
-    const fmt = v => (v===undefined || v===null) ? '—' : v;
-    const sc = $('#reviewSummaryCard');
-    if(!summary.hasData){
-      sc.innerHTML = `<div class="card-title">Summary</div><div class="empty-state">No Forge data recorded for this day yet.</div>`;
-    } else {
-      sc.innerHTML = `
-        <div class="card-title">Summary <span class="hint">${fmt(summary.score)}${summary.score!==undefined&&summary.score!==null?'/100':''}</span></div>
-        <div class="stat-row"><span>Tasks completed</span><b>${fmt(summary.taskDone)}/${fmt(summary.taskTotal)}</b></div>
-        <div class="stat-row"><span>Habits completed</span><b>${fmt(summary.habitDone)}/${fmt(summary.habitTotal)}</b></div>
-        <div class="stat-row"><span>Deadlines due</span><b>${fmt(summary.dueTodayDone)}/${fmt(summary.dueTodayTotal)}</b></div>
-        <div class="stat-row"><span>Overdue tasks</span><b>${fmt(summary.overdueCount)}</b></div>
-        <div class="stat-row"><span>Workout</span><b>${summary.workoutDone===undefined||summary.workoutDone===null?'—':(summary.workoutDone?'Done':'Missed')}</b></div>
-        <div class="stat-row"><span>Nutrition</span><b>${summary.nutritionPct!==undefined&&summary.nutritionPct!==null?summary.nutritionPct+'%':'—'}</b></div>
-        ${summary.missedDueToday && summary.missedDueToday.length ? `<div style="margin-top:8px;"><span style="font-size:12px;color:var(--text-dim);">Missed deadlines</span><div style="margin-top:4px;">${summary.missedDueToday.map(t=>`<span class="badge" style="background:rgba(240,85,90,.15);color:var(--red);margin:2px 4px 2px 0;display:inline-block;">${escapeHTML(t)}</span>`).join('')}</div></div>` : ''}
-      `;
-    }
-    $('#reviewWentWell').value = rec ? (rec.wentWell||'') : '';
-    $('#reviewWentWrong').value = rec ? (rec.wentWrong||'') : '';
-    $('#reviewLearned').value = rec ? (rec.learned||'') : '';
-    $('#reviewPriority').value = rec ? (rec.priority||'') : '';
-    $('#reviewStatusHint').textContent = rec && rec.completed ? 'Reviewed — editable' : 'Not reviewed yet';
-
-    const dates = Object.keys(state.reviews).sort((a,b)=>b.localeCompare(a));
-    $('#reviewHistoryList').innerHTML = dates.length ? dates.map(dk=>{
-      const r = state.reviews[dk];
-      return `<div class="item-row" style="cursor:pointer;" onclick="Forge.setReviewDate('${dk}')">
-        <div class="item-body"><div class="item-text">${dk}${dk===todayKey()?' (today)':''}</div></div>
-        <span class="review-status-badge ${r.completed?'done':'pending'}">${r.completed?'Reviewed':'Draft'}</span>
-      </div>`;
-    }).join('') : `<div class="empty-state">No reviews yet.</div>`;
-
-    updateMoreSubs();
-  }
-  function completeReview(){
-    const wentWell = $('#reviewWentWell').value.trim();
-    const wentWrong = $('#reviewWentWrong').value.trim();
-    const learned = $('#reviewLearned').value.trim();
-    const priority = $('#reviewPriority').value.trim();
-    const snapshot = computeDaySummary(reviewSelectedDate);
-    state.reviews[reviewSelectedDate] = {
-      date:reviewSelectedDate, wentWell, wentWrong, learned, priority,
-      completed:true, completedAt:new Date().toISOString(), snapshot
-    };
-    persist(); renderReview(); toast('Review saved');
-  }
-
-  /* ------------------------- WEEKLY COMPARISON (inside Stats) ------------------------- */
-  // Reads only from forge_history (+ today's live computeCategoryPcts) — never
-  // invents numbers for days with no recorded data.
-  function dayMetricsForComparison(dateKey){
-    const today = todayKey();
-    if(dateKey === today){
-      const p = computeCategoryPcts();
-      const dueTodayItems = state.datedTasks.filter(t=>t.dueDate===today);
-      return {
-        exists:true, score:p.overall, taskPct:p.taskPct, habitPct:p.habitPct, nutritionPct:p.nutritionPct,
-        workoutDone:p.workoutPct===100, dueTodayDone:dueTodayItems.filter(t=>t.done).length,
-        dueTodayTotal:dueTodayItems.length, overdueCount:p.overdueCount
-      };
-    }
-    const h = state.history[dateKey];
-    if(!h) return {exists:false};
-    return {
-      exists:true, score:h.overallPct, taskPct:h.taskPct, habitPct:h.habitPct, nutritionPct:h.nutritionPct,
-      workoutDone:h.workoutDone, dueTodayDone:h.dueTodayDone, dueTodayTotal:h.dueTodayTotal,
-      overdueCount:h.overdueCount
-    };
-  }
-  function aggregateWeek(dates){
-    const days = dates.map(dayMetricsForComparison).filter(d=>d.exists);
-    if(!days.length) return null;
-    const avg = arr => arr.length ? Math.round(arr.reduce((a,b)=>a+b,0)/arr.length) : null;
-    const workoutDays = days.filter(d=>d.workoutDone!==undefined && d.workoutDone!==null);
-    const deadlineDays = days.filter(d=>d.dueTodayTotal!==undefined && d.dueTodayTotal!==null && d.dueTodayTotal>0);
-    const overdueDays = days.filter(d=>d.overdueCount!==undefined && d.overdueCount!==null);
-    return {
-      daysCount: days.length,
-      scoreAvg: avg(days.map(d=>d.score)),
-      taskAvg: avg(days.map(d=>d.taskPct)),
-      habitAvg: avg(days.map(d=>d.habitPct)),
-      nutritionAvg: avg(days.map(d=>d.nutritionPct)),
-      workoutConsistency: workoutDays.length ? pct(workoutDays.filter(d=>d.workoutDone).length, workoutDays.length) : null,
-      deadlinesRate: deadlineDays.length ? pct(deadlineDays.reduce((s,d)=>s+d.dueTodayDone,0), deadlineDays.reduce((s,d)=>s+d.dueTodayTotal,0)) : null,
-      overdueTotal: overdueDays.length ? overdueDays.reduce((s,d)=>s+d.overdueCount,0) : null,
-      productiveDays: days.filter(d=>d.score>=80).length
-    };
-  }
-  function renderWeeklyComparison(){
-    const el = $('#weeklyComparisonBody'); if(!el) return;
-    const curDates = getWeekDates(0);
-    const prevDates = getWeekDates(-1);
-    const cur = aggregateWeek(curDates);
-    const prev = aggregateWeek(prevDates);
-    $('#weekCompRangeHint').textContent = `${formatDayLabel(curDates[0])}–${formatDayLabel(curDates[6])}`;
-    if(!cur){ el.innerHTML = `<div class="empty-state">Not enough historical data yet this week.</div>`; return; }
-
-    const metrics = [
-      {key:'scoreAvg',           label:'Avg Daily Score',      unit:'',  dir:1},
-      {key:'taskAvg',            label:'Task Completion',      unit:'%', dir:1},
-      {key:'habitAvg',           label:'Habit Completion',     unit:'%', dir:1},
-      {key:'workoutConsistency', label:'Workout Consistency',  unit:'%', dir:1},
-      {key:'nutritionAvg',       label:'Nutrition',            unit:'%', dir:1},
-      {key:'deadlinesRate',      label:'Deadlines Completed',  unit:'%', dir:1},
-      {key:'overdueTotal',       label:'Overdue Tasks',        unit:'',  dir:-1},
-      {key:'productiveDays',     label:'Productive Days',      unit:'',  dir:1},
-    ];
-
-    let rows = '', best=null, worst=null;
-    metrics.forEach(m=>{
-      const cv = cur[m.key], pv = prev ? prev[m.key] : null;
-      const cvTxt = (cv===null||cv===undefined) ? '—' : cv+m.unit;
-      const pvTxt = (pv===null||pv===undefined) ? '—' : pv+m.unit;
-      let changeTxt='—', changeClass='change-flat';
-      if(cv!==null && cv!==undefined && pv!==null && pv!==undefined){
-        const diff = cv-pv;
-        changeTxt = (diff>0?'+':'') + diff + m.unit;
-        changeClass = diff===0 ? 'change-flat' : ((diff>0 && m.dir===1) || (diff<0 && m.dir===-1)) ? 'change-up' : 'change-down';
-        if(diff!==0){
-          const score = diff*m.dir;
-          if(best===null || score>best.score) best={label:m.label, score};
-          if(worst===null || score<worst.score) worst={label:m.label, score};
-        }
-      }
-      rows += `<tr><td>${m.label}</td><td class="num">${cvTxt}</td><td class="num">${pvTxt}</td><td class="num ${changeClass}">${changeTxt}</td></tr>`;
-    });
-
-    const rateVals = metrics.filter(m=>m.unit==='%').map(m=>({label:m.label, v:cur[m.key]})).filter(x=>x.v!==null&&x.v!==undefined);
-    let win=null, problem=null;
-    if(rateVals.length){
-      win = rateVals.reduce((a,b)=>b.v>a.v?b:a);
-      problem = rateVals.reduce((a,b)=>b.v<a.v?b:a);
-    }
-
-    el.innerHTML = `
-      <table class="compare-table">
-        <thead><tr><th>Metric</th><th>Current</th><th>Previous</th><th>Change</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-      ${!prev ? `<div class="empty-state" style="padding:14px 4px;">Not enough data from last week to compare yet.</div>` : ''}
-      ${best && best.score>0 ? `<div class="callout"><b>Biggest improvement:</b> ${best.label}</div>` : ''}
-      ${worst && worst.score<0 ? `<div class="callout"><b>Biggest decline:</b> ${worst.label}</div>` : ''}
-      ${win ? `<div class="callout"><b>Weekly win:</b> ${win.label} (${win.v}%)</div>` : ''}
-      ${problem ? `<div class="callout"><b>Weekly problem:</b> ${problem.label} (${problem.v}%)</div>` : ''}
-    `;
-  }
-
-  /* ------------------------- EXPENSE TRACKER ------------------------- */
-  function populateExpenseCategorySelect(selected){
-    const sel = $('#expenseCategory'); if(!sel) return;
-    sel.innerHTML = state.settings.expenseCategories.map(c=>`<option value="${escapeHTML(c)}" ${c===selected?'selected':''}>${escapeHTML(c)}</option>`).join('');
-  }
-  function openExpenseModalNew(){
-    $('#expenseModalTitle').textContent='Add expense'; $('#expenseEditId').value='';
-    $('#expenseAmount').value=''; $('#expenseDate').value=todayKey(); $('#expenseDesc').value='';
-    populateExpenseCategorySelect();
-    openModal('expenseModalBackdrop');
-  }
-  function editExpense(id){
-    const e = state.expenses.find(e=>e.id===id); if(!e) return;
-    $('#expenseModalTitle').textContent='Edit expense'; $('#expenseEditId').value=id;
-    $('#expenseAmount').value=e.amount; $('#expenseDate').value=e.date; $('#expenseDesc').value=e.description||'';
-    populateExpenseCategorySelect(e.category);
-    openModal('expenseModalBackdrop');
-  }
-  function saveExpense(){
-    const amount = parseFloat($('#expenseAmount').value);
-    if(!amount || amount<=0){ toast('Enter a valid amount'); return; }
-    const date = $('#expenseDate').value || todayKey();
-    const category = $('#expenseCategory').value;
-    const description = $('#expenseDesc').value.trim();
-    const editId = $('#expenseEditId').value;
-    if(editId){ Object.assign(state.expenses.find(e=>e.id===editId), {amount,date,category,description}); }
-    else{ state.expenses.push({id:uid(), amount, category, description, date}); }
-    persist(); closeModal('expenseModalBackdrop'); renderAll(); toast('Expense saved');
-  }
-  function deleteExpense(id){ state.expenses = state.expenses.filter(e=>e.id!==id); persist(); renderAll(); toast('Expense deleted'); }
-  function renderExpenses(){
-    const tilesEl = $('#expenseSummaryTiles'); if(!tilesEl) return;
-    const today = todayKey();
-    const weekStart = weekStartKeyFor(new Date());
-    const monthStart = monthStartKey();
-    const cur = state.settings.currency;
-    const spentToday = expensesInRange(today,today).reduce((s,e)=>s+e.amount,0);
-    const spentWeek = expensesInRange(weekStart,today).reduce((s,e)=>s+e.amount,0);
-    const spentMonth = expensesInRange(monthStart,today).reduce((s,e)=>s+e.amount,0);
-    tilesEl.innerHTML = `
-      <div class="tile"><div class="tv">${cur}${round1(spentToday)}</div><div class="tl">Today</div></div>
-      <div class="tile"><div class="tv">${cur}${round1(spentWeek)}</div><div class="tl">This week</div></div>
-      <div class="tile"><div class="tv">${cur}${round1(spentMonth)}</div><div class="tl">This month</div></div>
-    `;
-    const budget = state.settings.monthlyBudget || 0;
-    const usedPct = budget>0 ? Math.round(spentMonth/budget*100) : 0;
-    $('#expenseBudgetHint').textContent = budget>0
-      ? `${cur}${round1(spentMonth)} of ${cur}${round1(budget)} — ${cur}${round1(Math.max(0,budget-spentMonth))} left (${usedPct}%)`
-      : 'No budget set — add one in Settings';
-    $('#expenseBudgetBar').style.width = Math.min(100,usedPct) + '%';
-    $('#expenseBudgetBar').style.background = usedPct>100 ? 'var(--red)' : usedPct>85 ? 'var(--amber)' : 'var(--teal)';
-
-    const monthExpenses = expensesInRange(monthStart, today);
-    const byCat = {};
-    monthExpenses.forEach(e=>{ byCat[e.category] = (byCat[e.category]||0) + e.amount; });
-    const catEntries = Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
-    $('#expenseCategoryBreakdown').innerHTML = catEntries.length ? catEntries.map(([cat,amt],idx)=>`
-      <div class="stat-row"><span>${escapeHTML(cat)}</span><b>${cur}${round1(amt)}</b></div>
-      <div class="pbar-track" style="margin-bottom:8px;"><div class="pbar-fill" style="background:${PALETTE[idx%PALETTE.length]};width:${clamp(pct(amt, spentMonth||1),0,100)}%;"></div></div>
-    `).join('') : `<div class="empty-state">No expenses logged this month.</div>`;
-
-    const sorted = [...state.expenses].sort((a,b)=>b.date.localeCompare(a.date));
-    $('#expenseListFull').innerHTML = sorted.length ? sorted.map(e=>`
-      <div class="expense-row">
-        <div style="min-width:0;">
-          <div style="font-size:14px;">${escapeHTML(e.description||e.category)}</div>
-          <div class="expense-meta">${e.date} · ${escapeHTML(e.category)}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-          <span class="mono" style="font-size:13.5px;">${cur}${round1(e.amount)}</span>
-          <button class="icon-btn sm" onclick="Forge.editExpense('${e.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></button>
-          <button class="icon-btn sm" onclick="Forge.deleteExpense('${e.id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2m-9 0l1 14h8l1-14"/></svg></button>
-        </div>
-      </div>
-    `).join('') : `<div class="empty-state">No expenses yet. Tap + to add one.</div>`;
-
-    updateMoreSubs();
-  }
-
-  /* ------------------------- SETTINGS ------------------------- */
-  function applyTheme(){ document.body.classList.toggle('theme-light', state.settings.theme==='light'); }
-  function renderSettings(){
-    const nameEl = $('#setName'); if(!nameEl) return;
-    const s = state.settings;
-    nameEl.value = s.userName || '';
-    $('#setCurrency').value = s.currency || '₹';
-    $('#setWeekStart').value = s.weekStart || 'Monday';
-    setSeg('#setThemeSeg', s.theme || 'dark');
-    renderScoreWeightInputs();
-    $('#setBudget').value = s.monthlyBudget || 0;
-    $('#setCategories').value = (s.expenseCategories||[]).join(', ');
-  }
-  function saveGeneralSettings(){
-    state.settings.userName = $('#setName').value.trim();
-    state.settings.currency = $('#setCurrency').value.trim() || '₹';
-    state.settings.weekStart = $('#setWeekStart').value;
-    state.settings.theme = getSeg('#setThemeSeg');
-    applyTheme(); persist(); toast('Settings saved'); renderAll();
-  }
-  function renderScoreWeightInputs(){
-    const el = $('#scoreWeightInputs'); if(!el) return;
-    el.innerHTML = currentWeights().map(w=>`
-      <div class="weight-row"><span>${w.label}</span><input type="number" min="0" max="100" id="wIn-${w.key}" value="${w.weight}" oninput="Forge.updateWeightSumHint()"></div>
-    `).join('');
-    updateWeightSumHint();
-  }
-  function updateWeightSumHint(){
-    let sum = 0;
-    currentWeights().forEach(w=>{
-      const inputEl = document.getElementById('wIn-'+w.key);
-      sum += inputEl ? (parseInt(inputEl.value,10)||0) : w.weight;
-    });
-    const hint = $('#weightSumHint'); if(!hint) return;
-    hint.textContent = `Total: ${sum}/100`;
-    hint.className = 'weight-sum ' + (sum===100 ? 'good' : 'bad');
-  }
-  function saveScoreWeights(){
-    const newWeights = {}; let sum = 0;
-    currentWeights().forEach(w=>{
-      const inputEl = document.getElementById('wIn-'+w.key);
-      const v = inputEl ? (parseInt(inputEl.value,10)||0) : w.weight;
-      newWeights[w.key] = v; sum += v;
-    });
-    if(sum !== 100){ toast(`Weights must total 100 — currently ${sum}`); return; }
-    state.settings.scoreWeights = newWeights;
-    persist(); toast('Score weights saved'); renderAll();
-  }
-  function saveExpenseSettings(){
-    const budget = parseFloat($('#setBudget').value) || 0;
-    const cats = $('#setCategories').value.split(',').map(c=>c.trim()).filter(Boolean);
-    state.settings.monthlyBudget = budget;
-    state.settings.expenseCategories = cats.length ? cats : DEFAULT_EXPENSE_CATEGORIES.slice();
-    persist(); toast('Expense settings saved'); renderAll();
-  }
-  function exportData(){
-    const backup = {};
-    Object.values(KEYS).forEach(k=>{ const raw = localStorage.getItem(k); if(raw!==null) backup[k]=JSON.parse(raw); });
-    backup._exportedAt = new Date().toISOString();
-    const blob = new Blob([JSON.stringify(backup,null,2)], {type:'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `forge-backup-${todayKey()}.json`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(()=>URL.revokeObjectURL(url), 2000);
-    toast('Backup downloaded');
-  }
-  function importData(file){
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try{
-        const data = JSON.parse(reader.result);
-        const knownKeys = Object.values(KEYS);
-        Object.keys(data).forEach(k=>{
-          if(k==='_exportedAt') return;
-          if(knownKeys.includes(k)) localStorage.setItem(k, JSON.stringify(data[k]));
-        });
-        loadAll(); runMigrations(); applyTheme(); renderAll();
-        toast('Data imported');
-      }catch(e){
-        console.error('Forge import failed', e);
-        toast('Invalid backup file');
-      }
-    };
-    reader.readAsText(file);
-  }
-  function resetData(){
-    if(!confirm('This will permanently erase ALL Forge data on this device. This cannot be undone. Continue?')) return;
-    if(!confirm('Last check — really reset everything?')) return;
-    Object.values(KEYS).forEach(k=>localStorage.removeItem(k));
-    location.reload();
   }
 
   function openModal(id){ $('#'+id).classList.add('open'); }
   function closeModal(id){ $('#'+id).classList.remove('open'); }
 
-  function updateFabVisibility(name){
-    const fab = $('#fabBtn'); if(!fab) return;
-    fab.style.display = ['more','review','settings'].includes(name) ? 'none' : 'flex';
-  }
   function switchView(name){
     $all('.view').forEach(v=>v.classList.remove('active'));
     $('#view-'+name).classList.add('active');
-    const tabMap = {review:'more', expenses:'more', settings:'more'};
-    const activeTabName = tabMap[name] || name;
-    $all('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.view===activeTabName));
-    updateFabVisibility(name);
+    $all('.tabbtn').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
     renderAll();
   }
   function renderAll(){
@@ -2241,16 +1666,12 @@ const Forge = (function(){
     if(gymSubView==='routine') renderRoutine();
     if(gymSubView==='records') renderRecords();
     renderStats();
-    renderReview();
-    renderExpenses();
-    renderSettings();
   }
 
   function init(){
     loadAll();
     runMigrations();
     runRollover();
-    applyTheme();
 
     const now = new Date();
     $('#eyebrowDate').textContent = now.toLocaleDateString(undefined,{weekday:'long'});
@@ -2267,7 +1688,6 @@ const Forge = (function(){
       else if(active==='view-habits'){ openHabitModal(); }
       else if(active==='view-nutrition'){ openNutrientModalNew(); }
       else if(active==='view-plan'){ openDatedTaskModalNew(plannerSelectedDay); }
-      else if(active==='view-expenses'){ openExpenseModalNew(); }
       else { openTaskModalNew(); }
     });
 
@@ -2275,8 +1695,14 @@ const Forge = (function(){
     $all('#taskPriSeg button').forEach(b=>b.addEventListener('click', ()=>setSeg('#taskPriSeg', b.dataset.v)));
     $all('#datedTaskCatSeg button').forEach(b=>b.addEventListener('click', ()=>setSeg('#datedTaskCatSeg', b.dataset.v)));
     $all('#datedTaskPriSeg button').forEach(b=>b.addEventListener('click', ()=>setSeg('#datedTaskPriSeg', b.dataset.v)));
-    $all('#setThemeSeg button').forEach(b=>b.addEventListener('click', ()=>setSeg('#setThemeSeg', b.dataset.v)));
     $all('.modal-backdrop').forEach(m=>m.addEventListener('click', e=>{ if(e.target===m) m.classList.remove('open'); }));
+
+    // Rollover also runs on init() above (covers: app was closed and reopened
+    // on a new day). These two catch the case where the app was left open
+    // ACROSS midnight without ever reloading — the tab regaining visibility
+    // or focus is the signal that "the user is back, maybe it's a new day now".
+    document.addEventListener('visibilitychange', () => { if(!document.hidden) checkDailyRollover(); });
+    window.addEventListener('focus', checkDailyRollover);
 
     renderAll();
 
@@ -2309,10 +1735,6 @@ const Forge = (function(){
     toggleDatedTaskDone, rescheduleDatedTaskToToday,
     setPlannerDay, shiftPlannerWeek,
     closeModal,
-    setReviewDate, completeReview,
-    openExpenseModalNew, editExpense, saveExpense, deleteExpense,
-    saveGeneralSettings, updateWeightSumHint, saveScoreWeights, saveExpenseSettings,
-    exportData, importData, resetData,
   };
 })();
 </script>
